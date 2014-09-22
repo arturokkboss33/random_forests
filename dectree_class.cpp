@@ -26,493 +26,349 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <map>
+#include <list>
+
 //can make a initializer list for a default constructor, but this
 //gives the possibility to the client to change these default
 //values
+
+//Note: cv::Mat has to initialized otherwise is not recognized as a class type when used
 Dectree_class::Dectree_class()
 {
-	hgoal = 0.;
-	per_error = 0.;
 	dbst = NULL;
+	classes = cv::Mat(0,1,CV_16SC1);
+	dectree_idx = 0;
+	split_nodes_idx = 0;
+	terminal_nodes_idx = 0;
 }
 
-//compute the overall entropy of the training set
-void Dectree_class::set_hgoal()
+
+int Dectree_class::get_dectree_idx() { return dectree_idx;}
+
+void Dectree_class::set_dectree_idx(int idx)
+{ dectree_idx = idx;}
+
+void Dectree_class::train(const cv::Mat& training_data, const cv::Mat& labels)
 {
-	hgoal = hcompute(training_set);
+	//determine the number of classes based on the training data
+	get_classes(labels);
+	std::cout << "Classes:\n" << classes << std::endl;
+	//make a vector giving an id to each attribute
+	set_attributes(training_data);
+	for(std::vector<int>::iterator it = attributes.begin(); it != attributes.end(); ++it)
+		std::cout << *it << " ";
+	std::cout << std::endl;
+	//compute the initial impurity just fot debugging
+	double hgoal = compute_entropy(labels);
+	std::cout << "Initial entropy: " << hgoal << std::endl;
+	//grow a decision tree
+	dbst.set_root(learn_dectree(cv::Mat(),labels, training_data, attributes));
+	//print the obtained tree
+	std::cout<< "\ninOrder traversal: " << std::endl;
+	dbst.inOrder(dbst.get_root());
+	std::cout << std::endl;
+	std::cout<< "\npostOrder traversal: " << std::endl;
+	dbst.postOrder(dbst.get_root());
+	
+	std::cout << std::endl;
+
+	//only for testing
+	/*
+	int a = plurality(labels);
+	std::cout << "Best class: " << a << std::endl;
+	bool b = check_classif(labels);
+	std::cout << "All same class?: " << b << std::endl;
+	dectree_split* t = best_split(attributes, training_data, labels);
+	std::cout << "Best attr: " << t->attr_name << " Pos: " << t->attr_idx << std::endl;
+	std::cout << t->neg_attr_labels << std::endl;
+	std::cout << t->neg_attr_data << std::endl;
+	std::cout << t->pos_attr_labels << std::endl;
+	std::cout << t->pos_attr_data << std::endl;
+	*/
 }
-double Dectree_class::get_hgoal()
-{return hgoal;}
 
-//learn the decision tree based on the training example
-void Dectree_class::set_dectree()
+//check number of classes; remember labels is a column vector
+void Dectree_class::get_classes(const cv::Mat& labels)
 {
-	dbst = learn_dectree(training_set,training_set, attributes);
-}
-dectree_node* Dectree_class::get_dectree()
-{ return dbst;}
-
-double Dectree_class::get_per_error()
-{
-	return per_error;
-}
-
-//read training data set and store it in a vector container
-void Dectree_class::load_trainset(std::string filename)
-{
-
-	//Variables for parsing the data file
-	std::string line;
-	std::stringstream parse;
-	int ssize = 100; //establish a buffer size to store attribute values,
-			 //which for binary classification string are no bigger than 1
-	char c[ssize];
-	char delimiter = ',';
-
-	//Variables to store the values in the data file
-	std::vector<char> tmpcase;
-
-	std::ifstream dataset_file(filename.c_str(), std::ios::in);
-
-	if(!dataset_file)
+	char flag_difval = 0;
+	int k = 0;
+	
+	classes.push_back(labels.at<int>(0));
+	for(int e = 1; e < labels.rows; e++)
 	{
-		std::cerr << "Cannot load training set file" << std::endl;
-	}
-	else
-	{
-		while( (getline(dataset_file, line))!= NULL )
+		flag_difval = 0;
+		k = 0;
+		while(flag_difval == 0 && k < classes.rows)
 		{
-			parse << line;
-
-			while( parse.getline(c,ssize,delimiter) )
-				tmpcase.push_back(*c);
-
-			parse.str(""); //safety measure to erase previous contents
-			parse.clear(); //clear flags to be able to read from it again
-
-			training_set.push_back(tmpcase);
-			tmpcase.clear(); 
-		}
+			if(labels.at<int>(e) == classes.at<int>(k))
+				flag_difval = 1;
+			k++;
+		}	
+		if(!flag_difval)
+			classes.push_back(labels.at<int>(e));
 	}
 
-	//set a vector of ints identifying each attribute
-	set_attributes();	
-
-}
-
-//auxiliary function to see if the training data set was parsed correctly
-void Dectree_class::print_trainset()
-{
-
-	std::vector<char> tmp;
-
-	std::cout << "\nTraining set: " << std::endl;
-	for(std::vector< std::vector<char> >::iterator it = training_set.begin(); it != training_set.end(); ++it)
-	{
-		tmp = *it;
-
-		for(std::vector<char>::iterator it2 = tmp.begin(); it2 != tmp.end(); ++it2)
-		{
-			std::cout << *it2 << " ";
-		}
-		std::cout << std::endl;
-	}
-
-	tmp.clear();	
-}
-
-//this method should be called after training the decision tree
-//reads a file with case examples and evaluate them through the
-//decision tree just learned. Then compares the predicted classification
-//with the real one to compute a percentage error
-//It returns a vector of booleans 
-std::vector<bool> Dectree_class::test_cases(std::string filename)
-{	
-
-	//Variables for parsing the data file
-	std::string line;
-	std::stringstream parse;
-	int ssize = 100; //establish a buffer size to store attribute values, which for binary classification string are no bigger than 1
-	char c[ssize];
-	char delimiter = ',';
-
-	//Variables to store the values in the data file
-	std::vector<char> tmpcase;
-
-	//Variables to traverse the decision tree and store results
-	dectree_node* tmp_node;
-	std::vector<bool> results;
-	int good_classif = 0;
-	int bad_classif = 0; 
-
-	std::ifstream dataset_file(filename.c_str(), std::ios::in);
-
-	if(!dataset_file)
-	{
-		std::cerr << "Cannot load test file" << std::endl;
-	}
-	else
-	{
-		while( (getline(dataset_file, line))!= NULL )
-		{
-			parse << line;
-
-			while( parse.getline(c,ssize,delimiter) )
-				tmpcase.push_back(*c);
-
-			parse.str(""); //safety measure to erase previous contents
-			parse.clear(); //clear flags to be able to read from it again
-
-			//traverse the decision tree and evaluate the parsed case
-			tmp_node = dbst;
-			//std::cout << "***Case***" << std::endl;
-
-
-			while(tmp_node != NULL && !(tmpcase.empty()))
-			{
-
-				if(!(tmp_node->type.compare("terminal")))
-				{
-					parse << tmp_node->output_id;	
-					
-					/*				
-					std::cout << "decide" << std::endl;
-					std::cout << "++" << tmp_node->output_id << std::endl;
-					std::cout << "++" << tmpcase.at(0)<< std::endl;
-					*/
-
-					if(*(parse.str().c_str())==tmpcase.at(0))
-					{
-						results.push_back(true);
-						good_classif++;
-					}
-					else
-					{
-						results.push_back(false);
-						bad_classif++;
-					}
-					
-					parse.str(""); 
-					parse.clear();
-					tmp_node = NULL;
-				}
-				else
-				{
-					if(tmpcase.at(tmp_node->attribute_id)=='0')
-					{
-						//std::cout << "go left" << std::endl;
-						tmp_node = tmp_node->f;
-					}
-					else
-					{
-						//std::cout << "go right" << std::endl;
-						tmp_node = tmp_node->t;
-					}
-				}
-			}
-
-			tmpcase.clear(); 
-		}
-	}
-
-	per_error = (double)bad_classif / (good_classif+bad_classif);
-	return results;
 }
 
 //set a vector of ints identifying each attribute
-void Dectree_class::set_attributes()
+void Dectree_class::set_attributes(const cv::Mat& training_data)
 {
-	std::vector<char> tmpcase;
-	tmpcase = training_set.at(0);
-	int j = 0;
-	for(std::vector<int>::size_type i = 1; i != tmpcase.size(); i++)
-	{
-		attributes.push_back(++j);
-	}
+	for(int attr = 0; attr < training_data.cols; attr++)
+		attributes.push_back(attr);
+
 }
 
+double Dectree_class::compute_entropy(const cv::Mat& labels)
+{
+	double entropy = 0.;
+	std::map<int, unsigned int> samples_per_class;
+
+	//create a hash table with the classes names as keys, they save the number
+	//of samples that have that particular label
+	for(int no_classes = 0; no_classes < classes.rows; no_classes++)
+		samples_per_class.insert( std::pair<int, unsigned int>(classes.at<int>(no_classes),0) );
+
+	for(int ex = 0; ex < labels.rows; ex++)
+		samples_per_class[labels.at<int>(ex)] += 1;
+
+	//compute entropy based on the previous counting
+	for(int no_classes = 0; no_classes < classes.rows; no_classes++)
+	{
+		double label_prob = (double)samples_per_class[classes.at<int>(no_classes)]/labels.rows;
+		//std::cout << label_prob << std::endl;
+
+		if( fabs(label_prob-0.) > FLT_EPSILON && fabs(label_prob-1.) > FLT_EPSILON )
+			entropy += label_prob*log2(label_prob);
+	}
+
+	entropy *= -1.;
+
+	return entropy;
+}
 
 //algorithm to learn a decision tree
 //it returns the root of the decision tree (or one of its subtrees in the recursion) 
 //inputs: parent examples, current examples, list of remaining attributes
-dectree_node* Dectree_class::learn_dectree(std::vector< std::vector<char> > p_ex, std::vector< std::vector<char> > ex, std::vector<int> atr)
+
+dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, const cv::Mat& samples_labels, const cv::Mat& samples_data, std::vector<int> attr)
 {
+	dectree_split* split = new dectree_split();	
+
 	//auxiliary variables
 	double h_curr = 0.;
-	std::vector<int> best_atr;
-	std::vector< std::vector<char> > new_ex1, new_ex2;
-	std::vector<char> tmp_ex;
 	Dectree_BST dectree; //decision tree structure
 	dectree_node* dectree_root = dectree.get_root();
 
 	//check the base cases to get out of the recursion
 	//if there are no more examples		
-	if(ex.empty())
+	if(samples_labels.empty())
 	{
 		//std::cout << "Case 1" << std::endl;
-		dectree.insert_node(&dectree_root, "terminal", -1, plurality(p_ex));
+		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), -1, plurality(p_samples_labels));
 		return dectree_root;
 	}
-	//if all examples have the same classification
-	else if(check_classif(ex))
-	{
-		//std::cout << "Case 2" << std::endl;
-		std::vector< std::vector<char> >::size_type i = 0;
-		if(ex[i].at(0)=='0')
-			dectree.insert_node(&dectree_root, "terminal", -1,0);
-		else
-			dectree.insert_node(&dectree_root, "terminal", -1,1);
-		return dectree_root;
 
+	
+	//if all examples have the same classification
+	else if(check_classif(samples_labels))
+	{
+		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), -1, samples_labels.at<int>(0));
+		return dectree_root;
 	}
 	//if there are no more attributes 
-	else if(atr.empty())
+	else if(attr.empty())
 	{
 		//std::cout << "Case 3" << std::endl;
-		dectree.insert_node(&dectree_root, "terminal", -1, plurality(ex));
+		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), -1, plurality(samples_labels));
 		return dectree_root;
 
 	}
 
-	//find the atrribute with the highest information gain
-	h_curr = hcompute(ex);
-	//std::cout << "Current entropy: " << h_curr << std::endl;	
-	best_atr = max_gain_atr(atr, ex, h_curr);
-	//std::cout << "Best attribute: " << best_atr.at(0) << std::endl;
+	//find the attrribute with the highest information gain
+	h_curr = compute_entropy(samples_labels);
+	std::cout << "Current entropy: " << h_curr << std::endl;	
+	split = best_split(attr, samples_data, samples_labels);
+	std::cout << "Best attribute: " << split->attr_name << std::endl;
 
 	//create a tree with the best attribute as root
-	dectree.insert_node(&dectree_root,"split", best_atr.at(0), -1);	
-	//std::cout << "Tree was splitted" << std::endl;
-	
-	//iterate through the attribute classes and call this fcn recursively
-	//select the appropriate subset of examples according to the attribute	
-	for(std::vector< std::vector<char> >::iterator it = ex.begin(); it != ex.end(); it++)
-	{
-		tmp_ex = *it;
-		if(tmp_ex.at(best_atr.at(0))=='0')
-			new_ex1.push_back(tmp_ex);
-		else
-			new_ex2.push_back(tmp_ex);
-	}
+	dectree.insert_node(&dectree_root,"split", (++split_nodes_idx), split->attr_name, -1);	
+	std::cout << "Tree was splitted" << std::endl;
 
-	//std::cout << "Examples subset created" << std::endl;	
-
-	//erase the attribute used and call the fcm recursively
+	//erase the attribute used and call the fcn recursively
 	//for each of the classes of the attribute and the set
 	//of examples created
-	atr.erase(atr.begin()+best_atr.at(1));
-	(dectree_root)->f = learn_dectree(ex,new_ex1,atr);	
-	(dectree_root)->t = learn_dectree(ex,new_ex2,atr);
+	attr.erase(attr.begin()+split->attr_idx);
+	(dectree_root)->f = learn_dectree(samples_labels,split->neg_attr_labels,split->neg_attr_data,attr);	
+	(dectree_root)->t = learn_dectree(samples_labels,split->pos_attr_labels,split->pos_attr_data,attr);
 
-	//std::cout << "Learning done" << std::endl;
+	std::cout << "Learning done" << std::endl;
 
-	return dectree_root;	
-}
-
-//compute total entropy based on current examples
-//return entropy and inputs: current examples
-double Dectree_class::hcompute(std::vector< std::vector<char> > ex)
-{
-	int pos_count = 0;
-	int neg_count = 0;
-	double p_pos = 0;
-	double entropy = 0.;
-	std::vector<char> tmp;
-
-	//count number of positive and negative examples
-	for(std::vector< std::vector<char> >::iterator it = ex.begin(); it != ex.end(); ++it)
-	{
-		tmp = *it;
-		if(tmp.at(0) == '1') 
-			pos_count++;
-		else
-			neg_count++;
-	}
-	tmp.clear();
-
-	/*
-	//Debugging print functions, uncomment if necessary
-	std::cout << std::endl;
-	std::cout << "Positive and negative counts" << std::endl;
-	std::cout << "* " << pos_count << " * " << neg_count << std::endl;
-	*/
-
-	//compute entropy
-	p_pos = (double)pos_count/(pos_count+neg_count);
-	if(p_pos == 0 || p_pos == 1)
-		entropy = 0;
-	else
-		entropy = -1*(p_pos*log2(p_pos)+(1-p_pos)*log2(1-p_pos));
-
-	return entropy;		
-}
-
-//return a 2-tuple indicating the best atr id and the its position of the list of all attributes (this position keeps changing as the list change size) 
-//inputs: list of remaining attriutes, current examples, entropy of the ancestor node
-std::vector<int> Dectree_class::max_gain_atr(std::vector<int> atr, std::vector< std::vector<char> > ex, double h_bef_split)
-{
-
-	//one vector of frequencies for each class of the attribute
-	//convenient to genralize for any number of classes
-	std::vector<int> atr_class1(2,0);
-	std::vector<int> atr_class2(2,0);
-
-	//auxiliary variables to make computations step by step
-	double h1 = 0.;
-	double h2 = 0.;
-	double p_pos = 0.;
-	double atr_info_gain = 0.;
-	std::vector<char> tmp;
-
-	//variables to decide which atr to choose
-	double max_gain = -1.; //info gain lies between 0-h(goal)
-	int best_atr = 0;
-	int idx_atr = 0;
-	int best_atr_pos = 0;
-	int count = 0;
-	std::vector<int> best_atr_info;
 	
-	//iterate through all attributes
-	for(std::vector<int>::iterator it_atr = atr.begin(); it_atr != atr.end(); ++it_atr)
-	{	
-		idx_atr = *it_atr;
-		//std::cout << "++ " << idx_atr << std::endl;
-		
-		//iterate through all examples
-		for(std::vector< std::vector<char> >::iterator it = ex.begin(); it != ex.end(); ++it)
-		{
-			tmp = *it;
-			//std::cout << "xx " << tmp.size() << std::endl;
-			//count according to the atr class and the 
-			//classification of the case it belongs
-			if(tmp.at(0) == '0')
-			{
-				if(tmp.at(idx_atr) == '0')
-					atr_class1.at(0) += 1;
-				else
-					atr_class2.at(0) += 1;
-			} 
-			else
-			{
-				if(tmp.at(idx_atr) == '0')
-					atr_class1.at(1) += 1;
-				else
-					atr_class2.at(1) += 1;
-			}
-		}
-		tmp.clear();
-
-		//compoute entropy and information gain
-		//be careful to consider the limit values of the math fcns
-		p_pos = (double)atr_class1.at(1)/(atr_class1.at(0)+atr_class1.at(1));
-		
-		if(p_pos == 0 || p_pos == 1)
-			h1 = 0;
-		else
-		{
-			h1 = -1*(p_pos*log2(p_pos)+(1-p_pos)*log2(1-p_pos));
-			h1 *= (double)(atr_class1.at(0)+atr_class1.at(1))/ex.size();
-		}
-		p_pos = (double)atr_class2.at(1)/(atr_class2.at(0)+atr_class2.at(1));
-		//std::cout << "ñññ " << p_pos << std::endl;
-		if(p_pos == 0 || p_pos == 1)
-			h2 = 0;
-		else
-		{
-			h2 = -1*(p_pos*log2(p_pos)+(1-p_pos)*log2(1-p_pos));
-			//std::cout << "ñññ " << h2 << std::endl;
-			h2 *= (double)(atr_class2.at(0)+atr_class2.at(1))/ex.size();
-		}
-		//info gain
-		atr_info_gain = h_bef_split - (h1+h2);
-
-		/* 
-		//Debugging print functions, uncomment if necessary
-		std::cout << "h1: " << h1 << std::endl;
-		std::cout << "h2: " << h2 << std::endl;
-		std::cout << "n1: " << atr_class1.at(0) << std::endl;
-		std::cout << "p1: " << atr_class1.at(1) << std::endl;
-		std::cout << "n2: " << atr_class2.at(0) << std::endl;
-		std::cout << "p2: " << atr_class2.at(1) << std::endl;
-		std::cout << "xx " << atr_info_gain << std::endl;
-		*/
-
-		//Decide if it is the best attribute
-		if(atr_info_gain > max_gain)
-		{
-			best_atr = idx_atr;
-			best_atr_pos = count;
-			max_gain = atr_info_gain;
-		}
-		count++;
-		
-		//Reset the counters
-		atr_class1.assign(2,0);
-		atr_class2.assign(2,0);
-	}
-
-	//return the best atr and its position in the list
-	best_atr_info.push_back(best_atr);
-	best_atr_info.push_back(best_atr_pos);
-	return best_atr_info;
+	return dectree_root;	
 }
 
 //Acoording to the basic cases of the learning algorithm
 //To decide a classification output it's necessary to do a majority vote
 //according to the remaining training examples
-int Dectree_class::plurality(std::vector< std::vector<char> > ex)
+//Reminder: give samples matrix as a column vector
+int Dectree_class::plurality(const cv::Mat& labels)
 {
-	std::vector<char> tmp;
-	int pos_count = 0;
-	int neg_count = 0;
 
-	//do the vote counting
-	for(std::vector< std::vector<char> >::iterator it = ex.begin(); it != ex.end(); ++it)
+	std::map<int, unsigned int> samples_per_class;
+
+	//create a hash table with the classes names as keys, they save the number
+	//of samples that have that particular label
+	for(int no_classes = 0; no_classes < classes.rows; no_classes++)
+		samples_per_class.insert( std::pair<int, unsigned int>(classes.at<int>(no_classes),0) );
+
+	for(int ex = 0; ex < labels.rows; ex++)
+		samples_per_class[labels.at<int>(ex)] += 1;
+
+	//iterate through the hash table to see which class has more votes
+	//tied classes are kept in a vector
+	std::map<int,unsigned int>::iterator it = samples_per_class.begin();
+	int best_class = it->first;
+	unsigned int max_votes = it->second;
+	++it;
+	cv::Mat tied_classes(0,1, CV_16SC1);
+	tied_classes.push_back(best_class);
+	
+	for(; it != samples_per_class.end(); ++it)
 	{
-		tmp = *it;
-		
-		if(tmp.at(0)=='0')
-			neg_count++;
-		else
-			pos_count++;
+		if(it->second > max_votes)
+		{
+			best_class = it->first;
+			max_votes = it->second;
+			tied_classes.release();
+			tied_classes.push_back(best_class);
+		}
+		else if(it->second == max_votes)
+			tied_classes.push_back(it->first);
 	}
 
-	//return the classification with more number of votes
-	if(pos_count > neg_count)
-		return 1;
-	else if(pos_count < neg_count)
-		return 0;
-	//if it's a tie, decide randomly
+	//if there are tied classes, pick one of them randomly
+	cv::RNG rng(time(NULL));
+	if(tied_classes.rows > 1)
+	{
+		int random_class = (int)(rng.uniform(0.,(double)tied_classes.rows));
+		//Note: rng.uniform does not accept int values
+		return tied_classes.at<int>(random_class);
+	}
 	else
-	{
-		srand(time(NULL));
-		return (rand()%2+1);
-	}
-		
+		return best_class;	
 }
 
 //check if the remaining examples have the same classification
 //if true, there is no necessity to continue the learning process
 //through the respective branch
-bool Dectree_class::check_classif(std::vector< std::vector<char> > ex)
+//Reminder: samples is a column vector
+bool Dectree_class::check_classif(const cv::Mat& labels)
 {
-	std::vector<char> tmp;
-	int pos_count = 0;
-	int neg_count = 0;
 
-	//count votes
-	for(std::vector< std::vector<char> >::iterator it = ex.begin(); it != ex.end(); ++it)
+	bool flag_dif_class = false;
+	int ex = 1;
+
+	while(flag_dif_class == false && ex < labels.rows)
 	{
-		tmp = *it;
-		
-		if(tmp.at(0)=='0')
-			neg_count++;
-		else
-			pos_count++;
+		if(labels.at<int>(0) != labels.at<int>(ex))
+			flag_dif_class = true;
+		ex++;
 	}
 
-	if(neg_count == 0 || pos_count == 0)
-		return true;
-	else
-		return false;
+	return !flag_dif_class;
+
 }
+
+//return a 2-tuple indicating the best atr id and the its position of the list of all attributes (this position keeps changing as the list change size) 
+//inputs: list of remaining attriutes, current examples, entropy of the ancestor node
+dectree_split* Dectree_class::best_split(std::vector<int> attr, const cv::Mat& samples, const cv::Mat& labels)
+{
+
+	std::vector<int> best_attr_info(2,0);
+	int true_attr_pos = 0;
+	int attr_idx;
+	double max_info_gain = 0.;
+	double attr_info_gain = 0.;
+	bool flag_compare_info_gain = false;
+	cv::Mat final_neg_attr_data(0,1,CV_32FC1);
+	cv::Mat final_pos_attr_data(0,1,CV_32FC1);
+	cv::Mat final_neg_attr_labels(0,1,CV_16SC1);
+	cv::Mat final_pos_attr_labels(0,1,CV_16SC1);
+	cv::Mat neg_attr_labels(0,1,CV_16SC1);
+	cv::Mat pos_attr_labels(0,1,CV_16SC1);
+
+	double imp_bef_split = compute_entropy(labels);
+
+	for(std::vector<int>::iterator it_attr = attr.begin(); it_attr != attr.end(); ++it_attr)
+	{
+		cv::Mat neg_attr_labels(0,1,CV_16SC1);
+		cv::Mat pos_attr_labels(0,1,CV_16SC1);
+		attr_idx = *it_attr;
+		for(int ex = 0; ex < samples.rows; ex++)
+		{
+			if( fabs(samples.at<float>(ex,attr_idx)-0.) <= FLT_EPSILON)
+				neg_attr_labels.push_back(labels.at<int>(ex));
+			else
+				pos_attr_labels.push_back(labels.at<int>(ex));
+		}
+		
+		double imp_neg_attr_labels = ((double)neg_attr_labels.rows/samples.rows)*compute_entropy(neg_attr_labels);
+		double imp_pos_attr_labels = ((double)pos_attr_labels.rows/samples.rows)*compute_entropy(pos_attr_labels);
+		double imp_attr = imp_neg_attr_labels + imp_pos_attr_labels;
+		attr_info_gain = imp_bef_split - imp_attr;
+		std::cout << "h1: " << imp_neg_attr_labels << std::endl;
+		std::cout << "h2: " << imp_pos_attr_labels << std::endl;
+
+		if(flag_compare_info_gain)
+		{
+			if(attr_info_gain > max_info_gain)
+			{
+				best_attr_info.at(0) = attr_idx;
+				best_attr_info.at(1) = true_attr_pos;
+				max_info_gain = attr_info_gain;
+			}
+		}
+		else
+		{
+			flag_compare_info_gain = true;
+			best_attr_info.at(0) = attr_idx;
+			best_attr_info.at(1) = true_attr_pos;
+			max_info_gain = attr_info_gain;
+		}
+		
+		true_attr_pos++;
+		neg_attr_labels.release();
+		pos_attr_labels.release();
+
+	}
+
+	//with the found best attribute; fill the split structure
+	//it's prefere to separate the samples again because otherwise a lot of memory reallocations take place
+	for(int ex = 0; ex < samples.rows; ex++)
+	{
+		if( fabs(samples.at<float>(ex,best_attr_info.at(0))-0.) <= FLT_EPSILON)
+		{
+			final_neg_attr_data.push_back(samples.row(ex));
+			final_neg_attr_labels.push_back(labels.at<int>(ex));
+		}
+		else
+		{
+			final_pos_attr_data.push_back(samples.row(ex));
+			final_pos_attr_labels.push_back(labels.at<int>(ex));
+		}
+	}
+
+	dectree_split* split = new dectree_split();
+	split->attr_name = best_attr_info.at(0);
+	split->attr_idx = best_attr_info.at(1);
+	split->neg_attr_data = final_neg_attr_data;
+	split->pos_attr_data = final_pos_attr_data;
+	split->neg_attr_labels = final_neg_attr_labels;
+	split->pos_attr_labels = final_pos_attr_labels;
+
+	return split;
+
+}
+
+ //*************************

@@ -25,37 +25,51 @@
 #include <string>
 #include <vector>
 
+//opencv libraries
+#include "opencv2/core/core.hpp"
+#include "opencv2/opencv.hpp"
+
+struct dectree_split 
+{
+	int attr_name;
+	int attr_idx;
+	cv::Mat neg_attr_data;		//samples with 'negative' classification
+	cv::Mat pos_attr_data;		//samples with 'positive' classification
+	cv::Mat neg_attr_labels;	//negative samples' labels
+	cv::Mat pos_attr_labels;	//positive samples' labels
+};
+
 class Dectree_class
 {
 	public:
+		//---constructor---
 		Dectree_class();
-		//---get and set methods---
-		void set_hgoal(); //entropy of the training set
-		double get_hgoal();
-		void set_dectree(); //learn decision tree
-		dectree_node* get_dectree();
-		double get_per_error();	
-
+		//get and set methods
+		int get_dectree_idx();
+		void set_dectree_idx(int idx);
+		
 		//---auxiliary methods---
-		void load_trainset(std::string filename); //save training set in a container
-		void print_trainset();//print training set only for debugging
-		std::vector<bool> test_cases(std::string filename); //test cases 
+		void train(const cv::Mat& training_data, const cv::Mat& labels);
+		//std::vector<bool> test_cases(std::string filename); //test cases 
 
 	private:
-		//---data members---
-		dectree_node* dbst; //decision tree root
-		std::vector< std::vector<char> > training_set; //container for the training set file
-		double hgoal; //goal entropy (how uncertain are we of the classification)
+
+		cv::Mat classes;
 		std::vector<int> attributes;
-		double per_error; //percentage of errors made in the test case
-		
-		//---auxiliary functions---	
-		void set_attributes(); //create a list of attributes ids
-		dectree_node* learn_dectree(std::vector< std::vector<char> >, std::vector< std::vector<char> >, std::vector<int>);//learning decision tree algorithm
-		double hcompute(std::vector< std::vector<char> >);//compute entropy of examples' sets
-		std::vector<int> max_gain_atr(std::vector<int>, std::vector< std::vector<char> >, double);//see which attribute has more information gain
-		int plurality(std::vector< std::vector<char> >);//majority count/vote
-		bool check_classif(std::vector< std::vector<char> >);//check if all the examples have the same classification
+		Dectree_BST dbst;
+		int dectree_idx;
+		unsigned int split_nodes_idx;
+		unsigned int terminal_nodes_idx;
+
+		void get_classes(const cv::Mat& labels);
+		void set_attributes(const cv::Mat& samples); //create a list of attributes ids
+		double compute_entropy(const cv::Mat& labels);
+		dectree_node* learn_dectree(const cv::Mat& p_samples, const cv::Mat& samples, const cv::Mat& samples_data, std::vector<int> attr);//learning decision tree algorithm
+		int plurality(const cv::Mat& samples);//majority count/vote
+		bool check_classif(const cv::Mat& samples);//check if all the examples have the same classification
+		dectree_split* best_split(std::vector<int> attr, const cv::Mat& samples, const cv::Mat& labels);
+		//see which attribute has more information gain
+
 };
 
 #endif 

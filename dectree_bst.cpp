@@ -33,15 +33,14 @@ dectree_node* Dectree_BST::get_root() { return root;}
 void Dectree_BST::set_root(dectree_node* rootPtr)
 { root = rootPtr;}
 
-
 //insert is not the same as in a common binary balance tree
 //the logic to insert the node in a branch of the tree is handled in the decision tree learning algorithm
-void Dectree_BST::insert_node(dectree_node** rootPtr, std::string type, int attribute, int classification)
+void Dectree_BST::insert_node(dectree_node** rootPtr, std::string type, unsigned int idx, int attribute, int classification)
 {
 	//check if the tree is empty
 	if(*rootPtr == NULL)
 	{
-		*rootPtr = create_node(type, attribute, classification);
+		*rootPtr = create_node(type, idx, attribute, classification);
 	}
 	else
 	{
@@ -87,9 +86,9 @@ void Dectree_BST::inOrder(dectree_node* ptr)
 		inOrder(ptr->f);
 
 		if(!((ptr->type).compare("terminal")))
-			std::cout << "Terminal: " << ptr->output_id << " ";
+			std::cout << "Terminal " << ptr->node_idx << ": " << ptr->output_id << " ";
 		else
-			std::cout << "Split: " << ptr->attribute_id << " ";
+			std::cout << "Split " << ptr->node_idx << ": " << ptr->attribute_id << " ";
 	
 		inOrder(ptr->t);
 	}
@@ -103,19 +102,20 @@ void Dectree_BST::postOrder(dectree_node* ptr)
 		postOrder(ptr->t);
 
 		if(!((ptr->type).compare("terminal")))
-			std::cout << "Terminal: " << ptr->output_id << " ";
+			std::cout << "Terminal " << ptr->node_idx << ": " << ptr->output_id << " ";
 		else
-			std::cout << "Split: " << ptr->attribute_id << " ";
+			std::cout << "Split " << ptr->node_idx << ": " << ptr->attribute_id << " ";
 	}
 }
 
 //create a node for the decision tree
 //depending if it is a leaf or a split node, the node's fields are
 //filled out differently
-dectree_node* Dectree_BST::create_node(std::string type, int attribute, int classification)
+dectree_node* Dectree_BST::create_node(std::string type, unsigned int idx, int attribute, int classification)
 {
 	dectree_node* new_node = new dectree_node();
 	new_node->type = type;
+	new_node->node_idx = idx;
 	std::stringstream ss;
 
 	//if the node is a split, the attribute or feature that caused the
