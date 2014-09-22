@@ -57,22 +57,59 @@ int main ( int argc, char *argv[] )
 	fstore_test_data["test_labels"] >> test_labels;
 	fstore_train_data.release();
 	//for debugging
+	/*
 	std::cout << train_samples << std::endl;
 	std::cout << train_labels << std::endl;
 	std::cout << test_samples << std::endl;
 	std::cout << test_labels << std::endl;
 	std::cout << test_labels.type() << std::endl;
+	*/
 	//++++++++++++++++++++++++++++++++++//
 
 	//+++ CREATE A DECISION TREE +++//
-	//cv::Mat test = (cv::Mat_<int>(9,1) << 6, 6, 6, 6, 6, 6, 6, 6, 5);
 	Dectree_class* dectree;	
 	dectree = new Dectree_class();
-	dectree->set_dectree_idx(3);
-	std::cout << dectree->get_dectree_idx() << std::endl;
-	dectree->train(train_samples, train_labels);	
-	std::cout << "done" << std::endl;
+	dectree->set_dectree_idx(3); //give an id to the tree
+	//std::cout << dectree->get_dectree_idx() << std::endl;
+	std::cout << "TRAINING DECISION TREE" << std::endl;
+	dectree->train(train_samples, train_labels);
+	//++++++++++++++++++++++++++++++++++//	
 
+	//+++ TESTING DECISION TREE +++//
+	double good_classif = 0;
+	for(int ex = 0; ex < train_samples.rows; ex++)
+	{
+		int prediction = dectree->predict(train_samples.row(ex));
+		//std::cout << "+++ " << prediction << std::endl;
+		if(prediction == train_labels.at<int>(ex))
+			good_classif += 1;
+	}
+		good_classif = good_classif/train_samples.rows;
+
+	std::cout << "Training accuracy: " << good_classif << std::endl;
+
+	good_classif = 0;
+	for(int ex = 0; ex < test_samples.rows; ex++)
+	{
+		int prediction = dectree->predict(test_samples.row(ex));
+		//std::cout << "+++ " << prediction << std::endl;
+		if(prediction == test_labels.at<int>(ex))
+			good_classif += 1;
+	}
+		good_classif = good_classif/test_samples.rows;
+
+	std::cout << "Testing accuracy: " << good_classif << std::endl;
+	//++++++++++++++++++++++++++++++++++//	
+
+	//+++ PRINT TREE STRUCTURE +++//
+	std::cout << "No. Leaves: " << dectree->get_noLeaves() << std::endl;
+	std::cout << "No. Nodes: " << dectree->get_noNodes() << std::endl;
+	std::cout << "\nInOrder traversal: " << std::endl;
+	dectree->inOrder_tree();
+	std::cout << std::endl;
+	std::cout << "\nPostOrder traversal: " << std::endl;
+	dectree->postOrder_tree();
+	std::cout << std::endl;
 	
 
 	

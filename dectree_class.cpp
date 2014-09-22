@@ -49,29 +49,49 @@ int Dectree_class::get_dectree_idx() { return dectree_idx;}
 void Dectree_class::set_dectree_idx(int idx)
 { dectree_idx = idx;}
 
+dectree_node* Dectree_class::get_root(){ return dbst.get_root();}
+
+void Dectree_class::inOrder_tree()
+{
+	dbst.inOrder(dbst.get_root());
+}
+void Dectree_class::postOrder_tree()
+{
+	dbst.postOrder(dbst.get_root());
+}
+
+int Dectree_class::get_noLeaves() { return terminal_nodes_idx;}
+
+int Dectree_class::get_noNodes() { return (split_nodes_idx+terminal_nodes_idx);}
+
 void Dectree_class::train(const cv::Mat& training_data, const cv::Mat& labels)
 {
 	//determine the number of classes based on the training data
 	get_classes(labels);
-	std::cout << "Classes:\n" << classes << std::endl;
+	//std::cout << "Classes:\n" << classes << std::endl;
 	//make a vector giving an id to each attribute
 	set_attributes(training_data);
+	//for debbugging
+	/*
 	for(std::vector<int>::iterator it = attributes.begin(); it != attributes.end(); ++it)
 		std::cout << *it << " ";
 	std::cout << std::endl;
+	*/
 	//compute the initial impurity just fot debugging
-	double hgoal = compute_entropy(labels);
-	std::cout << "Initial entropy: " << hgoal << std::endl;
+	//double hgoal = compute_entropy(labels);
+	//std::cout << "Initial entropy: " << hgoal << std::endl;
 	//grow a decision tree
 	dbst.set_root(learn_dectree(cv::Mat(),labels, training_data, attributes));
+	//for debugging
 	//print the obtained tree
+	/*
 	std::cout<< "\ninOrder traversal: " << std::endl;
 	dbst.inOrder(dbst.get_root());
 	std::cout << std::endl;
 	std::cout<< "\npostOrder traversal: " << std::endl;
-	dbst.postOrder(dbst.get_root());
-	
+	dbst.postOrder(dbst.get_root());	
 	std::cout << std::endl;
+	*/
 
 	//only for testing
 	/*
@@ -156,7 +176,7 @@ dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, cons
 	dectree_split* split = new dectree_split();	
 
 	//auxiliary variables
-	double h_curr = 0.;
+	//double h_curr = 0.;
 	Dectree_BST dectree; //decision tree structure
 	dectree_node* dectree_root = dectree.get_root();
 
@@ -184,28 +204,30 @@ dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, cons
 		return dectree_root;
 
 	}
+	else
+	{
+		//find the attrribute with the highest information gain
+		//h_curr = compute_entropy(samples_labels);
+		//std::cout << "Current entropy: " << h_curr << std::endl;	
+		split = best_split(attr, samples_data, samples_labels);
+		//std::cout << "Best attribute: " << split->attr_name << std::endl;
 
-	//find the attrribute with the highest information gain
-	h_curr = compute_entropy(samples_labels);
-	std::cout << "Current entropy: " << h_curr << std::endl;	
-	split = best_split(attr, samples_data, samples_labels);
-	std::cout << "Best attribute: " << split->attr_name << std::endl;
+		//create a tree with the best attribute as root
+		dectree.insert_node(&dectree_root,"split", (++split_nodes_idx), split->attr_name, -1);	
+		//std::cout << "Tree was splitted" << std::endl;
 
-	//create a tree with the best attribute as root
-	dectree.insert_node(&dectree_root,"split", (++split_nodes_idx), split->attr_name, -1);	
-	std::cout << "Tree was splitted" << std::endl;
+		//erase the attribute used and call the fcn recursively
+		//for each of the classes of the attribute and the set
+		//of examples created
+		attr.erase(attr.begin()+split->attr_idx);
+		(dectree_root)->f = learn_dectree(samples_labels,split->neg_attr_labels,split->neg_attr_data,attr);	
+		(dectree_root)->t = learn_dectree(samples_labels,split->pos_attr_labels,split->pos_attr_data,attr);
 
-	//erase the attribute used and call the fcn recursively
-	//for each of the classes of the attribute and the set
-	//of examples created
-	attr.erase(attr.begin()+split->attr_idx);
-	(dectree_root)->f = learn_dectree(samples_labels,split->neg_attr_labels,split->neg_attr_data,attr);	
-	(dectree_root)->t = learn_dectree(samples_labels,split->pos_attr_labels,split->pos_attr_data,attr);
-
-	std::cout << "Learning done" << std::endl;
+		//std::cout << "Learning done" << std::endl;
 
 	
-	return dectree_root;	
+		return dectree_root;	
+	}
 }
 
 //Acoording to the basic cases of the learning algorithm
@@ -251,6 +273,7 @@ int Dectree_class::plurality(const cv::Mat& labels)
 	cv::RNG rng(time(NULL));
 	if(tied_classes.rows > 1)
 	{
+		//std::cout << "Tie" << std::endl;
 		int random_class = (int)(rng.uniform(0.,(double)tied_classes.rows));
 		//Note: rng.uniform does not accept int values
 		return tied_classes.at<int>(random_class);
@@ -288,7 +311,7 @@ dectree_split* Dectree_class::best_split(std::vector<int> attr, const cv::Mat& s
 	std::vector<int> best_attr_info(2,0);
 	int true_attr_pos = 0;
 	int attr_idx;
-	double max_info_gain = 0.;
+	double max_info_gain = -1.;
 	double attr_info_gain = 0.;
 	bool flag_compare_info_gain = false;
 	cv::Mat final_neg_attr_data(0,1,CV_32FC1);
@@ -317,8 +340,9 @@ dectree_split* Dectree_class::best_split(std::vector<int> attr, const cv::Mat& s
 		double imp_pos_attr_labels = ((double)pos_attr_labels.rows/samples.rows)*compute_entropy(pos_attr_labels);
 		double imp_attr = imp_neg_attr_labels + imp_pos_attr_labels;
 		attr_info_gain = imp_bef_split - imp_attr;
-		std::cout << "h1: " << imp_neg_attr_labels << std::endl;
-		std::cout << "h2: " << imp_pos_attr_labels << std::endl;
+		//std::cout << "h1: " << imp_neg_attr_labels << std::endl;
+		//std::cout << "h2: " << imp_pos_attr_labels << std::endl;
+		//std::cout << "*** " << attr_info_gain;
 
 		if(flag_compare_info_gain)
 		{
@@ -343,6 +367,9 @@ dectree_split* Dectree_class::best_split(std::vector<int> attr, const cv::Mat& s
 
 	}
 
+	//std::cout << std::endl;
+	//std::cout << "max: " << max_info_gain << std::endl;
+
 	//with the found best attribute; fill the split structure
 	//it's prefere to separate the samples again because otherwise a lot of memory reallocations take place
 	for(int ex = 0; ex < samples.rows; ex++)
@@ -360,14 +387,37 @@ dectree_split* Dectree_class::best_split(std::vector<int> attr, const cv::Mat& s
 	}
 
 	dectree_split* split = new dectree_split();
-	split->attr_name = best_attr_info.at(0);
-	split->attr_idx = best_attr_info.at(1);
+	split->attr_name = best_attr_info.at(0); 	//global idx of the attribute - to be use later for prediction
+	split->attr_idx = best_attr_info.at(1);		//local idx of the attribute
 	split->neg_attr_data = final_neg_attr_data;
 	split->pos_attr_data = final_pos_attr_data;
 	split->neg_attr_labels = final_neg_attr_labels;
 	split->pos_attr_labels = final_pos_attr_labels;
 
 	return split;
+
+}
+
+int Dectree_class::predict(const cv::Mat& sample)
+{
+	dectree_node* tmp_node = dbst.get_root();
+	int prediction = -1;
+
+	while(tmp_node != NULL)
+	{
+		if( !(tmp_node->type.compare("terminal")) )
+			return tmp_node->output_id;
+		else
+		{
+			if( fabs(sample.at<float>(tmp_node->attribute_id)-0.) <= FLT_EPSILON)
+				tmp_node = tmp_node->f;
+			else
+				tmp_node = tmp_node->t;
+		}
+	}
+
+	return prediction;
+
 
 }
 

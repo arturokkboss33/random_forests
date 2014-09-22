@@ -47,10 +47,15 @@ class Dectree_class
 		//get and set methods
 		int get_dectree_idx();
 		void set_dectree_idx(int idx);
+		dectree_node* get_root();
+		int get_noLeaves();
+		int get_noNodes();
 		
 		//---auxiliary methods---
 		void train(const cv::Mat& training_data, const cv::Mat& labels);
-		//std::vector<bool> test_cases(std::string filename); //test cases 
+		int predict(const cv::Mat& sample);
+		void inOrder_tree();
+		void postOrder_tree();
 
 	private:
 
@@ -67,8 +72,7 @@ class Dectree_class
 		dectree_node* learn_dectree(const cv::Mat& p_samples, const cv::Mat& samples, const cv::Mat& samples_data, std::vector<int> attr);//learning decision tree algorithm
 		int plurality(const cv::Mat& samples);//majority count/vote
 		bool check_classif(const cv::Mat& samples);//check if all the examples have the same classification
-		dectree_split* best_split(std::vector<int> attr, const cv::Mat& samples, const cv::Mat& labels);
-		//see which attribute has more information gain
+		dectree_split* best_split(std::vector<int> attr, const cv::Mat& samples, const cv::Mat& labels); //see which attribute has more information gain
 
 };
 
