@@ -72,7 +72,9 @@ int main ( int argc, char *argv[] )
 	dectree->set_dectree_idx(3); //give an id to the tree
 	//std::cout << dectree->get_dectree_idx() << std::endl;
 	std::cout << "TRAINING DECISION TREE" << std::endl;
-	dectree->train(train_samples, train_labels);
+	int max_depth = 30;
+	int min_samples = 10;
+	dectree->train(train_samples, train_labels, max_depth, min_samples);
 	//++++++++++++++++++++++++++++++++++//	
 
 	//+++ TESTING DECISION TREE +++//
@@ -89,9 +91,12 @@ int main ( int argc, char *argv[] )
 	std::cout << "Training accuracy: " << good_classif << std::endl;
 
 	good_classif = 0;
+	cv::Mat used_leaves(0,2,CV_16SC1);
+	cv::Mat a;
 	for(int ex = 0; ex < test_samples.rows; ex++)
 	{
 		int prediction = dectree->predict(test_samples.row(ex));
+		used_leaves.push_back(dectree->predict_with_idx(test_samples.row(ex)));
 		//std::cout << "+++ " << prediction << std::endl;
 		if(prediction == test_labels.at<int>(ex))
 			good_classif += 1;
@@ -99,9 +104,14 @@ int main ( int argc, char *argv[] )
 		good_classif = good_classif/test_samples.rows;
 
 	std::cout << "Testing accuracy: " << good_classif << std::endl;
+	std::cout << used_leaves.rows << " " << used_leaves.cols << std::endl;
+	cv::Mat idxs = used_leaves.col(1).clone();
+	idxs = idxs.reshape(0,1);
+	std::cout << "Used leaves in testing:\n" << idxs << std::endl;
 	//++++++++++++++++++++++++++++++++++//	
 
 	//+++ PRINT TREE STRUCTURE +++//
+	std::cout << "Max depth: " << dectree->get_maxDepth() << std::endl;
 	std::cout << "No. Leaves: " << dectree->get_noLeaves() << std::endl;
 	std::cout << "No. Nodes: " << dectree->get_noNodes() << std::endl;
 	std::cout << "\nInOrder traversal: " << std::endl;

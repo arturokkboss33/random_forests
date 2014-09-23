@@ -34,7 +34,7 @@ class Dectree_BST
 		void set_root(dectree_node* rootPtr);
 		//insert a node based and complete its fields
 		//based on it's type: terminal or splitting
-		void insert_node(dectree_node** rootPtr, std::string type, unsigned int idx, int attribute, int classification); 
+		void insert_node(dectree_node** rootPtr, std::string type, unsigned int idx, int depth, int attribute, int classification); 
 		//search based on attribute id
 		bool search_node(dectree_node* root, int attribute_id);
 		//common methods to traverse a binary tree
@@ -45,7 +45,7 @@ class Dectree_BST
 		//member data
 		dectree_node* root;
 		//auxiliary method to insert a node
-		dectree_node* create_node(std::string, unsigned int, int, int);
+		dectree_node* create_node(std::string, unsigned int, int, int, int);
 };
 
 

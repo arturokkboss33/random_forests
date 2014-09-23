@@ -35,12 +35,12 @@ void Dectree_BST::set_root(dectree_node* rootPtr)
 
 //insert is not the same as in a common binary balance tree
 //the logic to insert the node in a branch of the tree is handled in the decision tree learning algorithm
-void Dectree_BST::insert_node(dectree_node** rootPtr, std::string type, unsigned int idx, int attribute, int classification)
+void Dectree_BST::insert_node(dectree_node** rootPtr, std::string type, unsigned int idx, int depth, int attribute, int classification)
 {
 	//check if the tree is empty
 	if(*rootPtr == NULL)
 	{
-		*rootPtr = create_node(type, idx, attribute, classification);
+		*rootPtr = create_node(type, idx, depth, attribute, classification);
 	}
 	else
 	{
@@ -111,11 +111,12 @@ void Dectree_BST::postOrder(dectree_node* ptr)
 //create a node for the decision tree
 //depending if it is a leaf or a split node, the node's fields are
 //filled out differently
-dectree_node* Dectree_BST::create_node(std::string type, unsigned int idx, int attribute, int classification)
+dectree_node* Dectree_BST::create_node(std::string type, unsigned int idx, int depth, int attribute, int classification)
 {
 	dectree_node* new_node = new dectree_node();
 	new_node->type = type;
 	new_node->node_idx = idx;
+	new_node->depth = depth;
 	std::stringstream ss;
 
 	//if the node is a split, the attribute or feature that caused the

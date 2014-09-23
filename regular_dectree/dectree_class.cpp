@@ -39,8 +39,11 @@ Dectree_class::Dectree_class()
 	dbst = NULL;
 	classes = cv::Mat(0,1,CV_16SC1);
 	dectree_idx = 0;
+	max_depth = 0;
+	min_depth = 1000; //just for research purposes
 	split_nodes_idx = 0;
 	terminal_nodes_idx = 0;
+	depth_limit = 0;
 }
 
 
@@ -64,7 +67,9 @@ int Dectree_class::get_noLeaves() { return terminal_nodes_idx;}
 
 int Dectree_class::get_noNodes() { return (split_nodes_idx+terminal_nodes_idx);}
 
-void Dectree_class::train(const cv::Mat& training_data, const cv::Mat& labels)
+int Dectree_class::get_maxDepth() { return max_depth;}
+
+void Dectree_class::train(const cv::Mat& training_data, const cv::Mat& labels, int depth_thresh, unsigned int samples_thresh)
 {
 	//determine the number of classes based on the training data
 	get_classes(labels);
@@ -81,7 +86,12 @@ void Dectree_class::train(const cv::Mat& training_data, const cv::Mat& labels)
 	//double hgoal = compute_entropy(labels);
 	//std::cout << "Initial entropy: " << hgoal << std::endl;
 	//grow a decision tree
-	dbst.set_root(learn_dectree(cv::Mat(),labels, training_data, attributes));
+	depth_limit = depth_thresh;
+	min_samples = samples_thresh;
+	int depth = 1;
+	dbst.set_root(learn_dectree(cv::Mat(),labels, training_data, attributes, depth));
+	find_depth(dbst.get_root());
+	std::cout << "min depth: " << min_depth << std::endl;
 	//for debugging
 	//print the obtained tree
 	/*
@@ -171,7 +181,7 @@ double Dectree_class::compute_entropy(const cv::Mat& labels)
 //it returns the root of the decision tree (or one of its subtrees in the recursion) 
 //inputs: parent examples, current examples, list of remaining attributes
 
-dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, const cv::Mat& samples_labels, const cv::Mat& samples_data, std::vector<int> attr)
+dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, const cv::Mat& samples_labels, const cv::Mat& samples_data, std::vector<int> attr, int depth)
 {
 	dectree_split* split = new dectree_split();	
 
@@ -185,24 +195,27 @@ dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, cons
 	if(samples_labels.empty())
 	{
 		//std::cout << "Case 1" << std::endl;
-		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), -1, plurality(p_samples_labels));
+		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), depth, -1, plurality(p_samples_labels));
 		return dectree_root;
 	}
-
-	
 	//if all examples have the same classification
 	else if(check_classif(samples_labels))
 	{
-		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), -1, samples_labels.at<int>(0));
+		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), depth, -1, samples_labels.at<int>(0));
 		return dectree_root;
 	}
 	//if there are no more attributes 
 	else if(attr.empty())
 	{
 		//std::cout << "Case 3" << std::endl;
-		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), -1, plurality(samples_labels));
+		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), depth, -1, plurality(samples_labels));
 		return dectree_root;
 
+	}
+	else if(depth >= depth_limit || samples_labels.rows < min_samples) //if this case is hit, there are attributes and samples to analyze
+	{
+		dectree.insert_node(&dectree_root, "terminal", (++terminal_nodes_idx), depth, -1, plurality(samples_labels));
+		return dectree_root;
 	}
 	else
 	{
@@ -213,15 +226,15 @@ dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, cons
 		//std::cout << "Best attribute: " << split->attr_name << std::endl;
 
 		//create a tree with the best attribute as root
-		dectree.insert_node(&dectree_root,"split", (++split_nodes_idx), split->attr_name, -1);	
+		dectree.insert_node(&dectree_root,"split", (++split_nodes_idx), depth, split->attr_name, -1);	
 		//std::cout << "Tree was splitted" << std::endl;
 
 		//erase the attribute used and call the fcn recursively
 		//for each of the classes of the attribute and the set
 		//of examples created
 		attr.erase(attr.begin()+split->attr_idx);
-		(dectree_root)->f = learn_dectree(samples_labels,split->neg_attr_labels,split->neg_attr_data,attr);	
-		(dectree_root)->t = learn_dectree(samples_labels,split->pos_attr_labels,split->pos_attr_data,attr);
+		(dectree_root)->f = learn_dectree(samples_labels,split->neg_attr_labels,split->neg_attr_data,attr,(depth+1));	
+		(dectree_root)->t = learn_dectree(samples_labels,split->pos_attr_labels,split->pos_attr_data,attr,(depth+1));
 
 		//std::cout << "Learning done" << std::endl;
 
@@ -419,6 +432,57 @@ int Dectree_class::predict(const cv::Mat& sample)
 	return prediction;
 
 
+}
+
+cv::Mat Dectree_class::predict_with_idx(const cv::Mat& sample)
+{
+	dectree_node* tmp_node = dbst.get_root();
+	cv::Mat prediction_mat = cv::Mat(0,1,CV_16SC1);
+	int prediction = -1;
+	int id = -1;
+
+	while(tmp_node != NULL)
+	{
+		if( !(tmp_node->type.compare("terminal")) )
+		{
+			prediction = tmp_node->output_id;
+			id = tmp_node->node_idx;
+			prediction_mat.push_back(prediction);
+			prediction_mat.push_back(id);
+			prediction_mat = prediction_mat.reshape(0,1);
+			return prediction_mat;
+		}
+		else
+		{
+			if( fabs(sample.at<float>(tmp_node->attribute_id)-0.) <= FLT_EPSILON)
+				tmp_node = tmp_node->f;
+			else
+				tmp_node = tmp_node->t;
+		}
+	}
+
+	return prediction_mat;
+
+
+}
+
+void Dectree_class::find_depth(dectree_node* ptr)
+{
+	if(ptr != NULL)
+	{
+		find_depth(ptr->f);
+
+		if(!((ptr->type).compare("terminal")))
+		{
+			if(ptr->depth > max_depth)
+				max_depth = ptr->depth;
+			if(ptr->depth < min_depth)
+				min_depth = ptr->depth;
+		}
+		
+		find_depth(ptr->t);
+	}
+	
 }
 
  //*************************

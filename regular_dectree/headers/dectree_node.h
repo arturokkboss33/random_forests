@@ -26,6 +26,7 @@
 struct dectree_node 
 {
 	unsigned int node_idx;
+	int depth;
 	std::string type; 	//terminal (states a classification), 
 				//split node (it only states an attribute and splits the tree)
 	std::string attribute; 	//if a label is needed to identify the attribute
