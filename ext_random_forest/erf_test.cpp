@@ -18,6 +18,7 @@
 
 //predefined classes
 #include "dectree_class.h"
+#include "erf_class.h"
 //c++ libraries
 #include <iostream>
 //opencv libraries
@@ -46,34 +47,59 @@ int main ( int argc, char *argv[] )
 	std::cout << "Train path: " << train_path.c_str() << std::endl;
 	std::cout << "Test path: " << test_path.c_str() << std::endl;
 	//saving the data in to opencv matrix
+	cv::Mat tmp1, tmp2;
 	cv::Mat train_samples, train_labels;
 	cv::Mat test_samples, test_labels;
 	cv::FileStorage fstore_train_data(train_path.c_str(), cv::FileStorage::READ);
 	fstore_train_data["train_samples"] >> train_samples;
-	fstore_train_data["train_labels"] >> train_labels;
+	//fstore_train_data["train_labels"] >> train_labels;
+	fstore_train_data["train_labels"] >> tmp1;
 	fstore_train_data.release();
 	cv::FileStorage fstore_test_data(test_path.c_str(), cv::FileStorage::READ);
 	fstore_test_data["test_samples"] >> test_samples;
-	fstore_test_data["test_labels"] >> test_labels;
+	//fstore_test_data["test_labels"] >> test_labels;
+	fstore_test_data["test_labels"] >> tmp2;
 	fstore_train_data.release();
-	//for debugging
 	/*
+	for(int row = 0; row < tmp1.rows; row++)
+	{
+		for(int col = 0; col < tmp1.cols; col++)
+		{
+			train_labels.push_back((int)(tmp1.at<float>(row,col)));
+		}
+	}
+	for(int row = 0; row < tmp2.rows; row++)
+	{
+		for(int col = 0; col < tmp2.cols; col++)
+		{
+			test_labels.push_back((int)(tmp2.at<float>(row,col)));
+		}
+	}
+	*/
+	train_labels = tmp1.clone();
+	test_labels = tmp2.clone();
+
+	std::cout << train_labels.type() << std::endl;
+	std::cout << test_labels.type() << std::endl;
+	//for debugging
+	
 	std::cout << train_samples << std::endl;
 	std::cout << train_labels << std::endl;
 	std::cout << test_samples << std::endl;
 	std::cout << test_labels << std::endl;
 	std::cout << test_labels.type() << std::endl;
-	*/
+	
 	//++++++++++++++++++++++++++++++++++//
 
+	
 	//+++ CREATE A DECISION TREE +++//
 	Dectree_class* dectree;	
 	dectree = new Dectree_class();
 	dectree->set_dectree_idx(3); //give an id to the tree
 	//std::cout << dectree->get_dectree_idx() << std::endl;
 	std::cout << "TRAINING DECISION TREE" << std::endl;
-	int max_depth = 30;
-	int min_samples = 10;
+	int max_depth = -1;
+	int min_samples = 1;
 	int active_vars = 5;
 	dectree->train(train_samples, train_labels, max_depth, min_samples, active_vars);
 	//++++++++++++++++++++++++++++++++++//	
@@ -92,8 +118,8 @@ int main ( int argc, char *argv[] )
 	std::cout << "Training accuracy: " << good_classif << std::endl;
 
 	good_classif = 0;
-	cv::Mat used_leaves(0,2,CV_16SC1);
-	cv::Mat a;
+	cv::Mat used_leaves(0,2,CV_32SC1);
+	//cv::Mat a;
 	for(int ex = 0; ex < test_samples.rows; ex++)
 	{
 		int prediction = dectree->predict(test_samples.row(ex));
@@ -108,7 +134,7 @@ int main ( int argc, char *argv[] )
 	std::cout << used_leaves.rows << " " << used_leaves.cols << std::endl;
 	cv::Mat idxs = used_leaves.col(1).clone();
 	idxs = idxs.reshape(0,1);
-	std::cout << "Used leaves in testing:\n" << idxs << std::endl;
+	//std::cout << "Used leaves in testing:\n" << idxs << std::endl;
 	//++++++++++++++++++++++++++++++++++//	
 
 	//+++ PRINT TREE STRUCTURE +++//
@@ -121,8 +147,44 @@ int main ( int argc, char *argv[] )
 	std::cout << "\nPostOrder traversal: " << std::endl;
 	dectree->postOrder_tree();
 	std::cout << std::endl;
-	
 
+	/*
+	//+++ CREATE RANDOM FOREST +++//
+	ERF_class* erf = new ERF_class();
+	std::cout << "TRAINING RANDOM FOREST" << std::endl;
+	int no_trees = 100;
+	erf->train(train_samples, train_labels, max_depth, min_samples, active_vars, no_trees);
+
+	//+++ TESTING DECISION TREE +++//
+	good_classif = 0;
+	for(int ex = 0; ex < train_samples.rows; ex++)
+	{
+		int prediction = erf->predict(train_samples.row(ex));
+		//std::cout << "+++ " << prediction << std::endl;
+		if(prediction == train_labels.at<int>(ex))
+			good_classif += 1;
+	}
+		good_classif = good_classif/train_samples.rows;
+
+	std::cout << "Training accuracy: " << good_classif << std::endl;
+
+	good_classif = 0;
+	cv::Mat pred_per_tree(0,2,CV_32SC1);
+	for(int ex = 0; ex < test_samples.rows; ex++)
+	{
+		int prediction = erf->predict(test_samples.row(ex));
+		//std::cout << "+++ " << prediction << std::endl;
+		//pred_per_tree = erf->predict_with_idx(test_samples.row(ex));
+		//std::cout << pred_per_tree << std::endl;
+		if(prediction == test_labels.at<int>(ex))
+			good_classif += 1;
+	}
+		good_classif = good_classif/test_samples.rows;
+
+	std::cout << "Testing accuracy: " << good_classif << std::endl;
+	
+	*/
+	
 	
 	/* 
 	//Load training set

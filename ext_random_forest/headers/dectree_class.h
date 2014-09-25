@@ -45,13 +45,16 @@ class Dectree_class
 	public:
 		//---constructor---
 		Dectree_class();
+		Dectree_class(cv::RNG);
 		//get and set methods
 		int get_dectree_idx();
 		void set_dectree_idx(int idx);
 		dectree_node* get_root();
+		cv::Mat get_classes();
 		int get_maxDepth();
 		int get_noLeaves();
 		int get_noNodes();
+		cv::RNG get_rng();
 		
 		//---auxiliary methods---
 		void train(const cv::Mat& training_data, const cv::Mat& labels, int depth_thresh, unsigned int samples_thresh, int vars_per_node);
@@ -74,12 +77,14 @@ class Dectree_class
 		unsigned int min_samples;
 		int active_vars;
 		cv::RNG rng; 
+		int max_split_fail;
+		bool is_ext_rng;
 
-		void get_classes(const cv::Mat& labels);
+		void set_classes(const cv::Mat& labels);
 		void set_attributes(const cv::Mat& samples); //create a list of attributes ids
 		double compute_entropy(const cv::Mat& labels);
 		double compute_erf_entropy(const cv::Mat& labels, const cv::Mat& neg_labels, const cv::Mat& pos_labels);
-		dectree_node* learn_dectree(const cv::Mat& p_samples, const cv::Mat& samples, const cv::Mat& samples_data, int depth);//learning decision tree algorithm
+		dectree_node* learn_dectree(const cv::Mat& p_samples, const cv::Mat& samples, const cv::Mat& samples_data, int depth, int no_split_fail);//learning decision tree algorithm
 		int plurality(const cv::Mat& samples);//majority count/vote
 		bool check_classif(const cv::Mat& samples);//check if all the examples have the same classification
 		dectree_split* best_split(const cv::Mat& samples, const cv::Mat& labels); //see which attribute has more information gain

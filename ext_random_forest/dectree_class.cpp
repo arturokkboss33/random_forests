@@ -22,9 +22,9 @@
 #include <math.h>
 #include <stdlib.h>
 #include <time.h>
-
 #include <map>
-#include <list>
+#include <limits>
+
 
 //can make a initializer list for a default constructor, but this
 //gives the possibility to the client to change these default
@@ -34,13 +34,30 @@
 Dectree_class::Dectree_class()
 {
 	dbst = NULL;
-	classes = cv::Mat(0,1,CV_16SC1);
+	classes = cv::Mat(0,1,CV_32SC1);
 	dectree_idx = 0;
 	max_depth = 0;
 	min_depth = 1000; //just for research purposes
 	split_nodes_idx = 0;
 	terminal_nodes_idx = 0;
 	depth_limit = 0;
+	max_split_fail = std::numeric_limits<int>::max();
+	is_ext_rng = false;
+}
+
+Dectree_class::Dectree_class(cv::RNG ext_rng)
+{
+	dbst = NULL;
+	classes = cv::Mat(0,1,CV_32SC1);
+	dectree_idx = 0;
+	max_depth = 0;
+	min_depth = 1000; //just for research purposes
+	split_nodes_idx = 0;
+	terminal_nodes_idx = 0;
+	depth_limit = 0;
+	max_split_fail = std::numeric_limits<int>::max();
+	is_ext_rng = true;
+	rng = ext_rng;
 }
 
 
@@ -60,18 +77,26 @@ void Dectree_class::postOrder_tree()
 	dbst.postOrder(dbst.get_root());
 }
 
+cv::Mat Dectree_class::get_classes() { return classes;}
+
 int Dectree_class::get_noLeaves() { return terminal_nodes_idx;}
 
 int Dectree_class::get_noNodes() { return (split_nodes_idx+terminal_nodes_idx);}
 
 int Dectree_class::get_maxDepth() { return max_depth;}
 
+cv::RNG Dectree_class::get_rng() {return rng;}
+
 void Dectree_class::train(const cv::Mat& training_data, const cv::Mat& labels, int depth_thresh, unsigned int samples_thresh, int vars_per_node)
 {
 	//initialize random generator
-	rng = cv::RNG(time(NULL));
+	if(!is_ext_rng)
+	{
+		rng = cv::RNG(time(NULL));
+		std::cout << "No ext rng" << std::endl;
+	}
 	//determine the number of classes based on the training data
-	get_classes(labels);
+	set_classes(labels);
 	//std::cout << "Classes:\n" << classes << std::endl;
 	//make a vector giving an id to each attribute
 	set_attributes(training_data);
@@ -85,16 +110,29 @@ void Dectree_class::train(const cv::Mat& training_data, const cv::Mat& labels, i
 	//double hgoal = compute_entropy(labels);
 	//std::cout << "Initial entropy: " << hgoal << std::endl;
 	//grow a decision tree
-	depth_limit = depth_thresh;
+	if(depth_thresh < 0)
+		depth_limit = std::numeric_limits<int>::max();
+	else
+		depth_limit = depth_thresh;
+	
 	min_samples = samples_thresh;
 	if(attributes.size() < (unsigned)vars_per_node)
 		active_vars = attributes.size();
 	else
 		active_vars = vars_per_node;
+
+	//max_split_fail = attributes.size() / active_vars;
+	max_split_fail = attributes.size();
 	int depth = 1;
-	dbst.set_root(learn_dectree(cv::Mat(),labels, training_data, depth));
+	int no_split_fail = 0;
+	dbst.set_root(learn_dectree(cv::Mat(),labels, training_data, depth, no_split_fail));
 	find_depth(dbst.get_root());
-	std::cout << "min depth: " << min_depth << std::endl;
+	//std::cout << "min depth: " << min_depth << std::endl;
+	//std::cout << "max fails: " << max_split_fail << std::endl;
+	//std::cout << "Max depth: " << get_maxDepth() << std::endl;
+	//std::cout << "No. Leaves: " << get_noLeaves() << std::endl;
+	//std::cout << "No. Nodes: " << get_noNodes() << std::endl;
+	//std::cout << std::endl;
 	//for debugging
 	//print the obtained tree
 	/*
@@ -122,7 +160,7 @@ void Dectree_class::train(const cv::Mat& training_data, const cv::Mat& labels, i
 }
 
 //check number of classes; remember labels is a column vector
-void Dectree_class::get_classes(const cv::Mat& labels)
+void Dectree_class::set_classes(const cv::Mat& labels)
 {
 	char flag_difval = 0;
 	int k = 0;
@@ -210,10 +248,12 @@ double Dectree_class::compute_erf_entropy(const cv::Mat& labels, const cv::Mat& 
 //it returns the root of the decision tree (or one of its subtrees in the recursion) 
 //inputs: parent examples, current examples, list of remaining attributes
 
-dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, const cv::Mat& samples_labels, const cv::Mat& samples_data, int depth)
+dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, const cv::Mat& samples_labels, const cv::Mat& samples_data, int depth, int no_split_fail)
 {
 	dectree_split* split = new dectree_split();	
-
+	//std::cout << "Depth: " << depth << std::endl;
+	//std::cout << "t: " << terminal_nodes_idx << std::endl;
+	//std::cout << "n: " << split_nodes_idx << std::endl;
 	//auxiliary variables
 	//double h_curr = 0.;
 	Dectree_BST dectree; //decision tree structure
@@ -252,24 +292,38 @@ dectree_node* Dectree_class::learn_dectree(const cv::Mat& p_samples_labels, cons
 		//h_curr = compute_entropy(samples_labels);
 		//std::cout << "Current entropy: " << h_curr << std::endl;	
 		split = erf_split(samples_data, samples_labels);
-		std::cout << "Best attribute: " << split->attr_name << std::endl;
+		//std::cout << "Best attribute: " << split->attr_name << std::endl;
 		std::cout << "Cut point: " << split->cut_point << std::endl;
 
-		//create a tree with the best attribute as root
-		dectree.insert_node(&dectree_root,"split", (++split_nodes_idx), depth, split->attr_name, split->cut_point, -1);	
-		//std::cout << "Tree was splitted" << std::endl;
+		//if the samples were not further separated, it's a bad split
+		if (split->neg_attr_labels.rows == 0 || split->pos_attr_labels.rows == 0 )
+			no_split_fail++;
+		else
+			no_split_fail = 0;
 
-		//call the fcn recursively
-		//for each of the classes of the attribute and the set
-		//of examples created. Here, no attributes are erases
-		//attr.erase(attr.begin()+split->attr_idx);
-		(dectree_root)->f = learn_dectree(samples_labels,split->neg_attr_labels,split->neg_attr_data,(depth+1));	
-		(dectree_root)->t = learn_dectree(samples_labels,split->pos_attr_labels,split->pos_attr_data,(depth+1));
+		if(no_split_fail >= max_split_fail)
+		{
+			//std::cout << "FAIL" << std::endl;
+			dectree.insert_node(&dectree_root,"terminal", (++terminal_nodes_idx), depth, -1, -1, plurality(samples_labels));
+			no_split_fail = 0;
+			return dectree_root;
+		}	
+		else
+		{
+			//create a tree with the best attribute as root
+			dectree.insert_node(&dectree_root,"split", (++split_nodes_idx), depth, split->attr_name, split->cut_point, -1);	
+			//std::cout << "Tree was splitted" << std::endl;
 
-		//std::cout << "Learning done" << std::endl;
+			//call the fcn recursively
+			//for each of the classes of the attribute and the set
+			//of examples created. Here, no attributes are erases
+			//attr.erase(attr.begin()+split->attr_idx);			
+			(dectree_root)->f = learn_dectree(samples_labels,split->neg_attr_labels,split->neg_attr_data,(depth+1), no_split_fail);	
+			(dectree_root)->t = learn_dectree(samples_labels,split->pos_attr_labels,split->pos_attr_data,(depth+1), no_split_fail);
 
-	
-		return dectree_root;	
+			//std::cout << "Learning done" << std::endl;	
+			return dectree_root;
+		}	
 	}
 }
 
@@ -296,7 +350,7 @@ int Dectree_class::plurality(const cv::Mat& labels)
 	int best_class = it->first;
 	unsigned int max_votes = it->second;
 	++it;
-	cv::Mat tied_classes(0,1, CV_16SC1);
+	cv::Mat tied_classes(0,1, CV_32SC1);
 	tied_classes.push_back(best_class);
 	
 	for(; it != samples_per_class.end(); ++it)
@@ -481,7 +535,7 @@ dectree_split* Dectree_class::erf_split(const cv::Mat& samples, const cv::Mat& l
 		}
 		
 		double split_score = compute_erf_entropy(labels, neg_attr_labels, pos_attr_labels);
-		std::cout << "*** entropy: " << split_score;
+		//std::cout << "*** entropy: " << split_score;
 
 		//double imp_neg_attr_labels = ((double)neg_attr_labels.rows/samples.rows)*compute_entropy(neg_attr_labels);
 		//double imp_pos_attr_labels = ((double)pos_attr_labels.rows/samples.rows)*compute_entropy(pos_attr_labels);
@@ -574,12 +628,12 @@ std::vector<int> Dectree_class::pick_variables()
 	}
 
 	//for debugging
-	std::cout << "Selected variables:" << std::endl;
+	//std::cout << "Selected variables:" << std::endl;
 	for ( std::vector<int>::iterator it=picked_vars.begin(); it != picked_vars.end(); ++it ) 
 	{
-		std::cout << ' ' << *it;
+		//std::cout << ' ' << *it;
 	}
-	std::cout << std::endl;
+	//std::cout << std::endl;
 
 	return picked_vars;
 	
@@ -588,6 +642,7 @@ std::vector<int> Dectree_class::pick_variables()
 std::vector<double> Dectree_class::gen_ran_splits(std::vector<int> attr, const cv::Mat& samples)
 {
 	std::vector<double> ran_splits;
+
 	for ( std::vector<int>::iterator it=attr.begin(); it != attr.end(); ++it ) 
 	{
 		double* max_val = new double();
@@ -596,7 +651,7 @@ std::vector<double> Dectree_class::gen_ran_splits(std::vector<int> attr, const c
 		cv::minMaxIdx(attr_values, min_val, max_val, NULL, NULL);
 		double cut = rng.uniform(*min_val, *max_val);
 		ran_splits.push_back(cut);	
-		std::cout << "min: " << *min_val << " max: " << *max_val << " cut: " << cut << std::endl;	
+		//std::cout << "min: " << *min_val << " max: " << *max_val << " cut: " << cut << std::endl;	
 	}
 
 	return ran_splits;
@@ -629,7 +684,7 @@ int Dectree_class::predict(const cv::Mat& sample)
 cv::Mat Dectree_class::predict_with_idx(const cv::Mat& sample)
 {
 	dectree_node* tmp_node = dbst.get_root();
-	cv::Mat prediction_mat = cv::Mat(0,1,CV_16SC1);
+	cv::Mat prediction_mat = cv::Mat(0,1,CV_32SC1);
 	int prediction = -1;
 	int id = -1;
 
