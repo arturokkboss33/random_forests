@@ -1,6 +1,6 @@
 /* =============================================================*/
 /* --- DECISION TREES - BINARY TREE NODE  SOURCE FILE        ---*/
-/* FILENAME: dectree_node.h 
+/* FILENAME: dectree_bst.h 
  *
  * DESCRIPTION: source file for the struct object of a binary
  * search tree, modified for its use in a decision tree 
@@ -17,11 +17,13 @@
  * 
  * ============================================================ */
 
+//headers
+#include "dectree_bst.h"
+//c++ libraries
 #include <iostream>
 #include <sstream>
 
-#include "dectree_bst.h"
-
+//constructor
 Dectree_BST::Dectree_BST(dectree_node* rootPtr)
 {
 	root = rootPtr;

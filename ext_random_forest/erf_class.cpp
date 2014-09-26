@@ -1,13 +1,13 @@
 /* =============================================================*/
 /* --- DECISION TREES- DECISION TREE CLASS SOURCE FILE       ---*/
-/* FILENAME: dectree_class.cpp 
+/* FILENAME: erf_class.cpp 
  *
  * DESCRIPTION: source file for the struct object which implements
- * a decision tree learning algorithm.
+ * a extremely random forest learning algorithm.
  *
  * VERSION: 1.0
  *
- * CREATED: 03/18/2013
+ * CREATED: 09/26/2013
  *
  * COMPILER: g++
  *
@@ -16,23 +16,22 @@
  * 
  * ============================================================ */
 
+//headers
 #include "erf_class.h"
-
+//c++ libraries
 #include <iostream>
 #include <stdlib.h>
+#include <string>
 
-
-//can make a initializer list for a default constructor, but this
-//gives the possibility to the client to change these default
-//values
-
-//Note: cv::Mat has to initialized otherwise is not recognized as a class type when used
+//*********************** CONSTRUCTOR *****************************//
 ERF_class::ERF_class()
 {
 	max_trees = 1;
 	tree_idx = 0;
 }
 
+//*********************** PUBLIC FUNCTIONS *************************//
+//training algorithm
 void ERF_class::train(const cv::Mat& training_data, const cv::Mat& labels, int depth_thresh, unsigned int samples_thresh, int vars_per_node, int no_trees)
 {
 
@@ -45,22 +44,24 @@ void ERF_class::train(const cv::Mat& training_data, const cv::Mat& labels, int d
 		Dectree_class* dectree = new Dectree_class(rng);
 		dectree->set_dectree_idx(tree);
 		dectree->train(training_data, labels, depth_thresh, samples_thresh, vars_per_node);
-		rng = dectree->get_rng();
+		rng = dectree->get_rng();	//get the last state of the random generator
 		forest.push_back(dectree);		
 	}
 
 }
 
-
+//prediction done by majority voting, returns a label
 int ERF_class::predict(const cv::Mat& sample)
 {
 	Dectree_class* dectree_tmp = forest.at(0);
 	cv::Mat classes = dectree_tmp->get_classes();
 	std::map<int, unsigned int> class_count;
 
+	//create a hash map with the available classes to keep a vote count
 	for(int no_classes = 0; no_classes < classes.rows; no_classes++)
 		class_count.insert( std::pair<int, unsigned int>(classes.at<int>(no_classes),0) );
 	
+	//compute the prediciton in each tree
 	for(int tree = 0; tree < max_trees; tree++)
 	{
 		Dectree_class* dectree = forest.at(tree);
@@ -68,6 +69,7 @@ int ERF_class::predict(const cv::Mat& sample)
 		class_count[prediction] += 1;
 	}
 
+	//see which class has more votes in the hash map
 	bool flag_compare = false;
 	int best_class;
 	unsigned int max_votes;
@@ -92,15 +94,22 @@ int ERF_class::predict(const cv::Mat& sample)
 	return best_class;
 }
 
+//prediction done by majority voting
+//this method returns a matrix where each row hs information about each tree (rows=no trees)
+//the first column has the predcited labels from each tree
+//the second column has the index of the leaf which decided the classification (relative to its tree)
+//the last row of the matrix has first the decided label by majority voting, and then the number of votes it received
 cv::Mat ERF_class::predict_with_idx(const cv::Mat& sample)
 {
 	Dectree_class* dectree_tmp = forest.at(0);
 	cv::Mat classes = dectree_tmp->get_classes();
 	std::map<int, unsigned int> class_count;
 
+	//create a hash map with the available classes to keep a vote count
 	for(int no_classes = 0; no_classes < classes.rows; no_classes++)
 		class_count.insert( std::pair<int, unsigned int>(classes.at<int>(no_classes),0) );
 	
+	//compute the predictino in each tree and store the indexes
 	cv::Mat used_leaves(0,2,CV_32SC1);
 	for(int tree = 0; tree < max_trees; tree++)
 	{
@@ -111,6 +120,7 @@ cv::Mat ERF_class::predict_with_idx(const cv::Mat& sample)
 		prediction.release();
 	}
 
+	//see which class has more votes in the hash map
 	bool flag_compare = false;
 	int best_class;
 	unsigned int max_votes;
@@ -132,6 +142,8 @@ cv::Mat ERF_class::predict_with_idx(const cv::Mat& sample)
 		}		
 	}
 
+	//add an extra row to the output matrix indicating the predicted label
+	//and the number of votes it received
 	cv::Mat final_prediction = (cv::Mat_<int>(1,2) << best_class, max_votes);
 	used_leaves.push_back(final_prediction); 
 	

@@ -32,9 +32,10 @@ class Dectree_BST
 		//get and set methods
 		dectree_node* get_root();
 		void set_root(dectree_node* rootPtr);
-		//insert a node based and complete its fields
+		//insert a node and complete its fields
 		//based on it's type: terminal or splitting
-		void insert_node(dectree_node** rootPtr, std::string type, unsigned int idx, int depth, int attribute, double cut_point, int classification); 
+		void insert_node(dectree_node** rootPtr, std::string type, unsigned int idx, int depth, 
+					int attribute, double cut_point, int classification); 
 		//search based on attribute id
 		bool search_node(dectree_node* root, int attribute_id);
 		//common methods to traverse a binary tree

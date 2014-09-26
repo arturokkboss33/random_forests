@@ -1,13 +1,13 @@
 /* =============================================================*/
 /* --- DECISION TREES- DECISION TREE CLASS HEADER FILE       ---*/
-/* FILENAME: dectree_class.cpp 
+/* FILENAME: ed_class.cpp 
  *
  * DESCRIPTION: header file for the struct object which implements
- * a decision tree learning algorithm.
+ * a extremely random forest learning algorithm.
  *
  * VERSION: 1.0
  *
- * CREATED: 03/18/2013
+ * CREATED: 26/18/2014
  *
  * COMPILER: g++
  *
@@ -20,11 +20,10 @@
 #ifndef ERF_CLASS_H
 #define ERF_CLASS_H
 
+//header files
 #include "dectree_class.h"
-
-#include <string>
+//c++ libraries
 #include <vector>
-
 //opencv libraries
 #include "opencv2/core/core.hpp"
 #include "opencv2/opencv.hpp"
@@ -42,6 +41,7 @@ class ERF_class
 		cv::Mat predict_with_idx(const cv::Mat& sample);
 
 	private:
+		//data members
 		int max_trees;
 		int tree_idx;
 		cv::RNG rng; 

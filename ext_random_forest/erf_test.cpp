@@ -25,16 +25,12 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/opencv.hpp"
 
-//defines
+//define
 #define TRAIN_PATH "training_sets/"
 #define TEST_PATH "test_sets/"
 
 int main ( int argc, char *argv[] )
 {
-	//Dectree_class dectree;
-	//Dectree_BST dbst;
-	//double hgoal = 0.;
-	std::vector<bool> results; //save list of results
 	
 	//+++ LOAD TRAINING AND TEST SET +++//
 	std::cout << "LOADING TRAINING AND TEST SET..." << std::endl;
@@ -60,6 +56,8 @@ int main ( int argc, char *argv[] )
 	//fstore_test_data["test_labels"] >> test_labels;
 	fstore_test_data["test_labels"] >> tmp2;
 	fstore_train_data.release();
+
+	//uncomment if the labels are stores as floats
 	/*
 	for(int row = 0; row < tmp1.rows; row++)
 	{
@@ -79,15 +77,16 @@ int main ( int argc, char *argv[] )
 	train_labels = tmp1.clone();
 	test_labels = tmp2.clone();
 
+	//for debugging
+	/*
 	std::cout << train_labels.type() << std::endl;
 	std::cout << test_labels.type() << std::endl;
-	//for debugging
-	
 	std::cout << train_samples << std::endl;
 	std::cout << train_labels << std::endl;
 	std::cout << test_samples << std::endl;
 	std::cout << test_labels << std::endl;
 	std::cout << test_labels.type() << std::endl;
+	*/
 	
 	//++++++++++++++++++++++++++++++++++//
 
@@ -185,37 +184,7 @@ int main ( int argc, char *argv[] )
 	
 	*/
 	
-	
-	/* 
-	//Load training set
-	dectree.load_trainset(train_file);
-	dectree.print_trainset();
-	//Compute entropy of overall classification
-	dectree.set_hgoal();
-	hgoal = dectree.get_hgoal();
-	std::cout << "\nGoal entropy: " << hgoal << std::endl;
-	//Build decision tree from the examples	
-	dectree.set_dectree();
-	dbst.set_root(dectree.get_dectree());
-	//traverse the dectree inOrder and postOrder to define its structure
-	std::cout<< "\ninOrder traversal: " << std::endl;
-	dbst.inOrder(dectree.get_dectree());
-	std::cout << std::endl;
-	std::cout<< "\npostOrder traversal: " << std::endl;
-	dbst.postOrder(dectree.get_dectree());
-	
-	std::cout << std::endl;
 
-	//print results
-	results = dectree.test_cases(test_file);
-	std::cout << "\n \% error: " << dectree.get_per_error() << std::endl;
-	std::cout << "\nTruth table for every test case" << std::endl;
-	for(std::vector<bool>::iterator it = results.begin(); it != results.end(); ++it)
-	{
-		std::cout << *it << " ";
-	}
-	std::cout << std::endl;
-	*/
 
 	return 0;
 }				/* ----------  end of function main  ---------- */
