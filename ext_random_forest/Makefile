@@ -8,7 +8,7 @@ OPENCV_LIBS = `pkg-config --libs opencv`
 dectree_exe : dectree_bst.o dectree_class.o erf_class.o erf_test.o
 	${CC} ${CFLAGS} ${DSEARCH} ${OPENCV_FLAGS} dectree_bst.o dectree_class.o erf_class.o erf_test.o -o dectree_exe ${OPENCV_LIBS}
 
-dectree_bst.o : dectree_bst.cpp ${HEADERS_DIR}/dectree_class.h ${HEADERS_DIR}/dectree_node.h
+dectree_bst.o : dectree_bst.cpp ${HEADERS_DIR}/dectree_bst.h ${HEADERS_DIR}/dectree_node.h
 	${CC} ${CFLAGS} ${DSEARCH} -c dectree_bst.cpp
 
 dectree_class.o : dectree_class.cpp ${HEADERS_DIR}/dectree_class.h ${HEADERS_DIR}/dectree_bst.h ${HEADERS_DIR}/dectree_node.h
