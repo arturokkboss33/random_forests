@@ -46,18 +46,20 @@ int main ( int argc, char *argv[] )
 	cv::Mat train_samples, train_labels;
 	cv::Mat test_samples, test_labels;
 	cv::FileStorage fstore_train_data(train_path.c_str(), cv::FileStorage::READ);
+	//fstore_train_data["matDescriptors"] >> train_samples;
 	fstore_train_data["train_samples"] >> train_samples;
 	//fstore_train_data["train_labels"] >> train_labels;
 	fstore_train_data["train_labels"] >> tmp1;
 	fstore_train_data.release();
 	cv::FileStorage fstore_test_data(test_path.c_str(), cv::FileStorage::READ);
+	//fstore_test_data["matDescriptors"] >> test_samples;
 	fstore_test_data["test_samples"] >> test_samples;
 	//fstore_test_data["test_labels"] >> test_labels;
 	fstore_test_data["test_labels"] >> tmp2;
 	fstore_train_data.release();
 
 	//uncomment if the labels are stores as floats
-	/*
+	
 	for(int row = 0; row < tmp1.rows; row++)
 	{
 		for(int col = 0; col < tmp1.cols; col++)
@@ -72,9 +74,9 @@ int main ( int argc, char *argv[] )
 			test_labels.push_back((int)(tmp2.at<float>(row,col)));
 		}
 	}
-	*/
-	train_labels = tmp1.clone();
-	test_labels = tmp2.clone();
+	
+	//train_labels = tmp1.clone();
+	//test_labels = tmp2.clone();
 
 	//for debugging
 	/*
@@ -98,10 +100,22 @@ int main ( int argc, char *argv[] )
 	std::cout << "TRAINING DECISION TREE" << std::endl;
 	int max_depth = -1;
 	int min_samples = 1;
-	int active_classes = 5;
+	int active_classes = 3;
 	dectree->train(train_samples, train_labels, max_depth, min_samples, active_classes);
 	//++++++++++++++++++++++++++++++++++//	
-	/*
+	//+++ PRINT TREE STRUCTURE +++//
+	std::cout << "Max depth: " << dectree->get_maxDepth() << std::endl;
+	std::cout << "No. Leaves: " << dectree->get_noLeaves() << std::endl;
+	std::cout << "No. Nodes: " << dectree->get_noNodes() << std::endl;
+	std::cout << "\nInOrder traversal: " << std::endl;
+	//dectree->inOrder_tree();
+	std::cout << std::endl;
+	std::cout << "\nPostOrder traversal: " << std::endl;
+	//dectree->postOrder_tree();
+	std::cout << std::endl;
+
+
+	
 	//+++ TESTING DECISION TREE +++//
 	double good_classif = 0;
 	for(int ex = 0; ex < train_samples.rows; ex++)
@@ -121,7 +135,7 @@ int main ( int argc, char *argv[] )
 	for(int ex = 0; ex < test_samples.rows; ex++)
 	{
 		int prediction = dectree->predict(test_samples.row(ex));
-		used_leaves.push_back(dectree->predict_with_idx(test_samples.row(ex)));
+		//used_leaves.push_back(dectree->predict_with_idx(test_samples.row(ex)));
 		//std::cout << "+++ " << prediction << std::endl;
 		if(prediction == test_labels.at<int>(ex))
 			good_classif += 1;
@@ -129,12 +143,14 @@ int main ( int argc, char *argv[] )
 		good_classif = good_classif/test_samples.rows;
 
 	std::cout << "Testing accuracy: " << good_classif << std::endl;
-	std::cout << used_leaves.rows << " " << used_leaves.cols << std::endl;
-	cv::Mat idxs = used_leaves.col(1).clone();
-	idxs = idxs.reshape(0,1);
+	//std::cout << used_leaves.rows << " " << used_leaves.cols << std::endl;
+	//cv::Mat idxs = used_leaves.col(1).clone();
+	//idxs = idxs.reshape(0,1);
 	//std::cout << "Used leaves in testing:\n" << idxs << std::endl;
 	//++++++++++++++++++++++++++++++++++//	
-
+	
+	
+	/*
 	//+++ PRINT TREE STRUCTURE +++//
 	std::cout << "Max depth: " << dectree->get_maxDepth() << std::endl;
 	std::cout << "No. Leaves: " << dectree->get_noLeaves() << std::endl;

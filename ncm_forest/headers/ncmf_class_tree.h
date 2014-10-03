@@ -121,7 +121,7 @@ class NCMF_class_tree
 		bool check_classif(const cv::Mat& samples);//check if all the examples have the same classification
 		//mehthods to create splits
 		NCMF_node* erf_split(const cv::Mat& samples, const cv::Mat& labels); //see which attribute has more information gain
-		cv::Mat pick_classes(); //pick k random classes
+		cv::Mat pick_classes(const cv::Mat curr_labels); //pick k random classes
 		//std::vector<double> gen_ran_splits(std::vector<int> attr, const cv::Mat& samples); //generate random splits
 		double compute_erf_entropy(const cv::Mat& labels, const cv::Mat& neg_labels, const cv::Mat& pos_labels); //shannon entropy
 		double compute_entropy(const cv::Mat& labels); //standard entropy
