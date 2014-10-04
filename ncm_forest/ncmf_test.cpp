@@ -18,6 +18,7 @@
 
 //predefined classes
 #include "ncmf_class_tree.h"
+#include "ncmf_forest.h"
 //c++ libraries
 #include <iostream>
 //opencv libraries
@@ -46,16 +47,16 @@ int main ( int argc, char *argv[] )
 	cv::Mat train_samples, train_labels;
 	cv::Mat test_samples, test_labels;
 	cv::FileStorage fstore_train_data(train_path.c_str(), cv::FileStorage::READ);
-	//fstore_train_data["matDescriptors"] >> train_samples;
-	fstore_train_data["train_samples"] >> train_samples;
+	fstore_train_data["matDescriptors"] >> train_samples;
+	//fstore_train_data["train_samples"] >> train_samples;
 	//fstore_train_data["train_labels"] >> train_labels;
-	fstore_train_data["train_labels"] >> tmp1;
+	fstore_train_data["labels"] >> tmp1;
 	fstore_train_data.release();
 	cv::FileStorage fstore_test_data(test_path.c_str(), cv::FileStorage::READ);
-	//fstore_test_data["matDescriptors"] >> test_samples;
-	fstore_test_data["test_samples"] >> test_samples;
+	fstore_test_data["matDescriptors"] >> test_samples;
+	//fstore_test_data["test_samples"] >> test_samples;
 	//fstore_test_data["test_labels"] >> test_labels;
-	fstore_test_data["test_labels"] >> tmp2;
+	fstore_test_data["labels"] >> tmp2;
 	fstore_train_data.release();
 
 	//uncomment if the labels are stores as floats
@@ -163,18 +164,18 @@ int main ( int argc, char *argv[] )
 	std::cout << std::endl;
 	*/	
 
-	/*
+	
 	//+++ CREATE RANDOM FOREST +++//
-	ERF_class* erf = new ERF_class();
+	NCMF_forest* ncmf = new NCMF_forest();
 	std::cout << "TRAINING RANDOM FOREST" << std::endl;
-	int no_trees = 100;
-	erf->train(train_samples, train_labels, max_depth, min_samples, active_vars, no_trees);
+	int no_trees = 5;
+	ncmf->train(train_samples, train_labels, max_depth, min_samples, active_classes, no_trees);
 
 	//+++ TESTING DECISION TREE +++//
 	good_classif = 0;
 	for(int ex = 0; ex < train_samples.rows; ex++)
 	{
-		int prediction = erf->predict(train_samples.row(ex));
+		int prediction = ncmf->predict(train_samples.row(ex));
 		//std::cout << "+++ " << prediction << std::endl;
 		if(prediction == train_labels.at<int>(ex))
 			good_classif += 1;
@@ -187,9 +188,9 @@ int main ( int argc, char *argv[] )
 	cv::Mat pred_per_tree(0,2,CV_32SC1);
 	for(int ex = 0; ex < test_samples.rows; ex++)
 	{
-		int prediction = erf->predict(test_samples.row(ex));
+		int prediction = ncmf->predict(test_samples.row(ex));
 		//std::cout << "+++ " << prediction << std::endl;
-		//pred_per_tree = erf->predict_with_idx(test_samples.row(ex));
+		//pred_per_tree = ncmf->predict_with_idx(test_samples.row(ex));
 		//std::cout << pred_per_tree << std::endl;
 		if(prediction == test_labels.at<int>(ex))
 			good_classif += 1;
@@ -198,7 +199,7 @@ int main ( int argc, char *argv[] )
 
 	std::cout << "Testing accuracy: " << good_classif << std::endl;
 	
-	*/
+	
 	
 
 

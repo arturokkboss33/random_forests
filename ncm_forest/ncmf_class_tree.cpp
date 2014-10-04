@@ -489,7 +489,7 @@ bool NCMF_class_tree::check_classif(const cv::Mat& labels)
 NCMF_node* NCMF_class_tree::erf_split(const cv::Mat& samples, const cv::Mat& labels)
 {
 	//---select K classes randomly---//
-	cv::Mat selected_classes = pick_classes();
+	cv::Mat selected_classes = pick_classes(labels);
 
 	//---select the samples that correspond to these classes (and their labels)---//
 	cv::Mat selected_samples(0,1,CV_32SC1);
@@ -505,12 +505,16 @@ NCMF_node* NCMF_class_tree::erf_split(const cv::Mat& samples, const cv::Mat& lab
 			if(labels.at<int>(s) == selected_classes.at<int>(idx_class))
 			{
 				sample_belongs = true;
-				selected_samples.push_back(samples.at<int>(idx_class));
+				selected_samples.push_back(samples.at<int>(s));
 				selected_labels.push_back(labels.at<int>(s));
 			}
 			idx_class++;
 		}
 	}
+	//for debugging
+	//std::cout << "Selected: " << std::endl;
+	//std::cout << selected_samples << std::endl;
+	//std::cout << selected_labels << std::endl;
 
 	//---compute the centroids of the selected samples---//
 	//create hash table
@@ -525,12 +529,38 @@ NCMF_node* NCMF_class_tree::erf_split(const cv::Mat& samples, const cv::Mat& lab
 	//compute the mean of the samples per class
 	for(int s = 0; s < selected_samples.rows; s++)
 	{
-		centroids[selected_labels.at<int>(s)] += selected_samples.row(s);
+		centroids[selected_labels.at<int>(s)] += init_samples.row(selected_samples.at<int>(s));
 		cc_centroids[selected_labels.at<int>(s)] +=1;
 	}
-	for(int idx = 0; idx < selected_classes.rows; idx++)
-		centroids[selected_classes.at<int>(idx)] *= (1/cc_centroids[selected_classes.at<int>(idx)]);
 
+	//for debugging
+	/*
+	std::cout << "Centroids: " << std::endl;
+	for(std::map<int,cv::Mat>::iterator it = centroids.begin(); it != centroids.end(); ++it)
+	{
+		std::cout << it->first << ": \n" << it->second << std::endl;
+	}
+	std::cout << "Counters: " << std::endl;
+	for(std::map<int,unsigned int>::iterator it = cc_centroids.begin(); it != cc_centroids.end(); ++it)
+	{
+		std::cout << it->first << ": \n" << it->second << std::endl;
+	}
+	*/
+
+	for(int idx = 0; idx < selected_classes.rows; idx++)
+	{
+		double scale = (1./cc_centroids[selected_classes.at<int>(idx)]);
+		centroids[selected_classes.at<int>(idx)] *= scale;
+	}
+
+	//for debugging
+	/*
+	std::cout << "Centroids: " << std::endl;
+	for(std::map<int,cv::Mat>::iterator it = centroids.begin(); it != centroids.end(); ++it)
+	{
+		std::cout << it->first << ": \n" << it->second << std::endl;
+	}
+	*/
 	//---create M split fcns at random---//
 
 	//first compute which is the closest centroid to each sample
@@ -563,68 +593,80 @@ NCMF_node* NCMF_class_tree::erf_split(const cv::Mat& samples, const cv::Mat& lab
 		closest_centr_pos.push_back(class_pos);
 	}
 
+	//for debugging
+	//std::cout << "Closest centroids pos: " << std::endl;
+	//std::cout << closest_centr_pos << std::endl;
+
 	//variables to create partitions
-	boost::dynamic_bitset<> partition(active_classes);
+	boost::dynamic_bitset<> partition(selected_classes.rows);
 	//std::bitset<active_classes> partition;
 	partition.reset();
 	partition.set(0,1);
-	boost::dynamic_bitset<> stop_partition(active_classes);
+	boost::dynamic_bitset<> stop_partition(selected_classes.rows);
 	//std::bitset<active_classes> stop_partition;
 	stop_partition.reset();
-	stop_partition.set(active_classes-1,1);
+	stop_partition.set(selected_classes.rows-1,1);
 	int cc_partitions = 1;
 	//others
 	bool flag_compare_info_gain = false;
 	double max_split_score = 0.;
-	boost::dynamic_bitset<> best_partition(active_classes);
+	boost::dynamic_bitset<> best_partition(selected_classes.rows);
 	//std::bitset<active_classes> best_partition;
 
 	//split the samples according to their closest centroid
 	if(!more_split_fcns)
 	{
 		//split sampples
-		cv::Mat right_labels(0,1,CV_32SC1);
-		cv::Mat left_labels(0,1,CV_32SC1);
-		for(int ex = 0; ex < closest_centr_pos.rows; ex++)
+		while(stop_partition != partition)
 		{
-			//see to which branch the closest centroid was assigned and store the sample there
-			if(partition[closest_centr_pos.at<int>(ex)])
-				right_labels.push_back(selected_labels.at<int>(ex));
+			//std::cout << partition << std::endl;
+			cv::Mat right_labels(0,1,CV_32SC1);
+			cv::Mat left_labels(0,1,CV_32SC1);
+			for(int ex = 0; ex < closest_centr_pos.rows; ex++)
+			{
+				//see to which branch the closest centroid was assigned and store the sample there
+				//std::cout << "&&& " << partition[ex] << std::endl;
+				if(partition[closest_centr_pos.at<int>(ex)])
+					right_labels.push_back(selected_labels.at<int>(ex));
+				else
+					left_labels.push_back(selected_labels.at<int>(ex));
+			}
+
+			//compute the shannon entropy of the obtained split
+			double split_score = compute_erf_entropy(selected_labels, left_labels, right_labels);
+			//std::cout << split_score << std::endl;
+
+			//compare the score with the previous ones, and save the best
+			if(flag_compare_info_gain)
+			{
+				if(split_score > max_split_score)
+				{
+					max_split_score = split_score;
+					best_partition = partition;
+				}
+			}
 			else
-				left_labels.push_back(selected_labels.at<int>(ex));
-		}
-
-		//compute the shannon entropy of the obtained split
-		double split_score = compute_erf_entropy(selected_labels, left_labels, right_labels);
-
-		//compare the score with the previous ones, and save the best
-		if(flag_compare_info_gain)
-		{
-			if(split_score > max_split_score)
 			{
 				max_split_score = split_score;
 				best_partition = partition;
+				flag_compare_info_gain = true;
 			}
-		}
-		else
-		{
-			max_split_score = split_score;
-			best_partition = partition;
-		}
 
-		//create the bitset that will generate the next partition
-		cc_partitions++;
-		for(int no_bit = 0; no_bit < active_classes; no_bit++)
-		{
-			int d = (int)(pow(2.,(double)no_bit));
-			if(cc_partitions%d == 0)
-				partition.flip(no_bit);
-		}
+			//create the bitset that will generate the next partition
+			cc_partitions++;
+			for(int no_bit = 0; no_bit < active_classes; no_bit++)
+			{
+				int d = (int)(pow(2.,(double)no_bit));
+				if(cc_partitions%d == 0)
+					partition.flip(no_bit);
+			}
 
-		right_labels.release();
-		left_labels.release();
+			right_labels.release();
+			left_labels.release();
+		}
 	}
 
+	//std::cout << "Best partition: " << best_partition << std::endl;
 	//with the best partition found, divide the data and labels and create a node
 	cv::Mat final_right_labels(0,1,CV_32SC1);
 	cv::Mat final_left_labels(0,1,CV_32SC1);
@@ -646,15 +688,28 @@ NCMF_node* NCMF_class_tree::erf_split(const cv::Mat& samples, const cv::Mat& lab
 			final_left_data.push_back(selected_samples.at<int>(ex));
 		}
 	}
-	for(int no_bit = 0; no_bit < active_classes; no_bit++)
+	for(int no_bit = 0; no_bit < selected_classes.rows; no_bit++)
 	{
-		int curr_class = selected_classes.at<int>(closest_centr_pos.at<int>(no_bit));
+		int curr_class = selected_classes.at<int>(no_bit);
 		if(best_partition[no_bit])
 			right_centroids.insert( std::pair<int,cv::Mat>( curr_class, centroids[curr_class]) );
 		else
 			left_centroids.insert( std::pair<int,cv::Mat>( curr_class, centroids[curr_class]) );
 	}
 
+	//for debugging
+	/*
+	std::cout << "Left centroids: " << std::endl;
+	for(std::map<int,cv::Mat>::iterator it = left_centroids.begin(); it != left_centroids.end(); ++it)
+	{
+		std::cout << it->first << ": \n" << it->second << std::endl;
+	}
+	std::cout << "Right centroids: " << std::endl;
+	for(std::map<int,cv::Mat>::iterator it = right_centroids.begin(); it != right_centroids.end(); ++it)
+	{
+		std::cout << it->first << ": \n" << it->second << std::endl;
+	}
+	*/
 	NCMF_node* node = new NCMF_node();
 	node->left_centroids = left_centroids;
 	node->right_centroids = right_centroids;
@@ -763,39 +818,73 @@ NCMF_node* NCMF_class_tree::erf_split(const cv::Mat& samples, const cv::Mat& lab
 
 
 //method to randomly pick k distinct attributes
-cv::Mat NCMF_class_tree::pick_classes()
+cv::Mat NCMF_class_tree::pick_classes(const cv::Mat curr_labels)
 {
-	std::map<unsigned int, short> table_classes;
+
+	//check which classes are available
 	cv::Mat picked_classes(0,1,CV_32SC1);
-	int no_picked_classes = 0;
+	cv::Mat curr_classes(0,1,CV_32SC1);
+	bool flag_new_class = true;
+	int k = 0;
+	
+	curr_classes.push_back(curr_labels.at<int>(0));
+	for(int e = 1; e < curr_labels.rows; e++)
+	{
+		flag_new_class = true;
+		k = 0;
+		while(flag_new_class == true && k < curr_classes.rows)
+		{
+			if(curr_labels.at<int>(e) == curr_classes.at<int>(k))
+				flag_new_class = false;
+			k++;
+		}	
+		if(flag_new_class)
+			curr_classes.push_back(curr_labels.at<int>(e));
+	}
+
+	//std::map<unsigned int, short> table_classes;
+	//cv::Mat picked_classes(0,1,CV_32SC1);
+	//int no_picked_classes = 0;
 
 	//create a hash table, to quickly check if the random generated attribute has already been selected
-	for(int no_class = 0; no_class < classes.rows; no_class++)
-		table_classes.insert( std::pair<int, short>(classes.at<int>(no_class),0) );
+	//for(int no_class = 0; no_class < curr_classes.rows; no_class++)
+	//	table_classes.insert( std::pair<int, short>(curr_classes.at<int>(no_class),0) );
 
-	//pick k attributes randomly
-	while(no_picked_classes < active_classes)
+	//pick k classes randomly
+	if(curr_classes.rows <= active_classes)
+		return curr_classes;
+	else
 	{
-		int r = (int)(rng.uniform(0., (double)classes.rows ));
-		if(table_classes[classes.at<int>(r)] == 0)
+		std::map<unsigned int, short> table_classes;
+		int no_picked_classes = 0;
+
+		//create a hash table, to quickly check if the random generated attribute has already been selected
+		for(int no_class = 0; no_class < curr_classes.rows; no_class++)
+			table_classes.insert( std::pair<int, short>(curr_classes.at<int>(no_class),0) );
+
+		while(no_picked_classes < active_classes)
 		{
-			picked_classes.push_back(classes.at<int>(r));
-			table_classes[classes.at<int>(r)] += 1;
-			no_picked_classes++;
+			int r = (int)(rng.uniform(0., (double)curr_classes.rows ));
+			if(table_classes[curr_classes.at<int>(r)] == 0)
+			{
+				picked_classes.push_back(curr_classes.at<int>(r));
+				table_classes[curr_classes.at<int>(r)] += 1;
+				no_picked_classes++;
+			}
 		}
-	}
 
-	//for debugging
-	/*
-	std::cout << "Selected classes:" << std::endl;
-	for ( std::vector<int>::iterator it=picked_classes.begin(); it != picked_classes.end(); ++it ) 
-	{
-		std::cout << ' ' << *it;
-	}
-	std::cout << std::endl;
-	*/
+		//for debugging
+		/*
+		std::cout << "Selected classes:" << std::endl;
+		for ( std::vector<int>::iterator it=picked_classes.begin(); it != picked_classes.end(); ++it ) 
+		{
+			std::cout << ' ' << *it;
+		}
+		std::cout << std::endl;
+		*/
 
-	return picked_classes;
+		return picked_classes;
+	}
 	
 }
 
